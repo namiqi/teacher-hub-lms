@@ -1,73 +1,31 @@
-# React + TypeScript + Vite
+# Hub LMS — Modern Teacher-First Learning Management System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A sleek, high-fidelity Learning Management System designed from the ground up to minimize administrative friction for educators. Unlike traditional academic portals, Hub LMS focuses on clean visual hierarchy, intuitive dashboards, and rapid micro-analytics for classrooms.
 
-Currently, two official plugins are available:
+## 🚀 Key Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+* **Centralized Command Center (Overview):** A single-glance dashboard displaying daily schedules, high-level metric summaries (Total Students, Active Classes), and urgent pending grading notifications.
+* **Dynamic Course Management (My Classes):** Comprehensive class grids allowing teachers to monitor enrollment metrics and launch deep-dive management screens.
+* **Real-Time Assignment Tracking:** Visual progress and submission bars displaying grading pipelines and color-coded statuses.
+* **Unified Student Directory:** Searchable roster layouts mapping student emails, course affiliations, and current performance metrics.
+* **Account Control Workspace:** Modular settings console featuring editable profile matrices and interactive security controls (2FA toggles).
 
-## React Compiler
+## 🛠️ Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+* **Frontend Framework:** React (with TypeScript for robust type-safety)
+* **Build Engine:** Vite (for near-instantaneous hot module reloading)
+* **Styling Utility:** Tailwind CSS (utility-first CSS engine for clean, maintainable layout designs)
+* **Iconography:** Lucide React (minimalist vector icon primitives)
 
-## Expanding the ESLint configuration
+## 📂 Project Architecture
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+```text
+teacher-hub-lms/
+├── src/
+│   ├── components/       # Modular UI blocks (Sidebar, Header, Tab views)
+│   ├── assets/           # Global design layouts and structural styles
+│   ├── App.tsx           # Primary application canvas and shell router
+│   └── main.tsx          # Application bootstrapper and context engine
+├── public/               # Static system vectors and assets
+├── tailwind.config.js    # Utility engine compiling constraints
+└── package.json          # Core dependency manifest
