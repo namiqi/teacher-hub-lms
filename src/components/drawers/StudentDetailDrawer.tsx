@@ -1,16 +1,17 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { formatBillingLabel } from '../../lib/billing'
+import { formatPaymentRecord, paymentsForStudent } from '../../lib/payments'
 import {
   classNameForKey,
   ensureTokenMapsForEnrollment,
-  formatTokenLabel,
-  hasAnyCriticalBalance,
 } from '../../lib/studentTokens'
-import type { Class, Student } from '../../types'
+import type { Class, PaymentRecord, Student } from '../../types'
 
 interface StudentDetailDrawerProps {
   student: Student | null
   classes: Class[]
+  payments: PaymentRecord[]
   isOpen: boolean
   isVaultView: boolean
   onClose: () => void
@@ -23,6 +24,7 @@ interface StudentDetailDrawerProps {
 export default function StudentDetailDrawer({
   student,
   classes,
+  payments,
   isOpen,
   isVaultView,
   onClose,
@@ -51,6 +53,8 @@ export default function StudentDetailDrawer({
 
   if (!isOpen || !student || !draft) return null
 
+  const studentPayments = paymentsForStudent(payments, student.id)
+
   const toggleClass = (classKey: string) => {
     setSelectedClassKeys((prev) => {
       const next = prev.includes(classKey)
@@ -76,8 +80,9 @@ export default function StudentDetailDrawer({
     onSave({
       ...draft,
       name: draft.name.trim(),
-      parentContact: draft.parentContact.trim(),
-      grade: draft.grade.trim(),
+      studentPhone: (draft.studentPhone ?? '').trim(),
+      parentPhone: (draft.parentPhone ?? '').trim(),
+      grade: (draft.grade ?? '').trim(),
       enrolledClasses: maps.enrolledClasses,
       tokensByClass: maps.tokensByClass,
       tokenCapacityByClass: maps.tokenCapacityByClass,
@@ -136,14 +141,9 @@ export default function StudentDetailDrawer({
                 {selectedClassKeys.length === 0
                   ? 'No class enrollments'
                   : selectedClassKeys
-                      .map((key) => formatTokenLabel(draft, key))
+                      .map((key) => formatBillingLabel(draft, key, classes))
                       .join(' · ')}
               </p>
-              {hasAnyCriticalBalance(draft) && (
-                <p className="mt-1 text-xs font-medium text-rose-600">
-                  Critical balance in at least one class
-                </p>
-              )}
             </div>
           </div>
 
@@ -157,19 +157,33 @@ export default function StudentDetailDrawer({
               />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Parent Contact</span>
+              <span className="text-sm font-medium text-slate-700">
+                Student Phone (Optional)
+              </span>
               <input
-                value={draft.parentContact}
+                value={draft.studentPhone ?? ''}
                 onChange={(e) =>
-                  setDraft((d) => d && { ...d, parentContact: e.target.value })
+                  setDraft((d) => d && { ...d, studentPhone: e.target.value })
                 }
                 className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Grade</span>
+              <span className="text-sm font-medium text-slate-700">
+                Parent Phone (Optional)
+              </span>
               <input
-                value={draft.grade}
+                value={draft.parentPhone ?? ''}
+                onChange={(e) =>
+                  setDraft((d) => d && { ...d, parentPhone: e.target.value })
+                }
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Grade / Status (Optional)</span>
+              <input
+                value={draft.grade ?? ''}
                 onChange={(e) => setDraft((d) => d && { ...d, grade: e.target.value })}
                 className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
@@ -205,7 +219,7 @@ export default function StudentDetailDrawer({
                       </span>
                       {checked && (
                         <span className="text-xs font-medium text-slate-600">
-                          {formatTokenLabel(draft, c.classKey)}
+                          {formatBillingLabel(draft, c.classKey, classes)}
                         </span>
                       )}
                     </label>
@@ -223,11 +237,32 @@ export default function StudentDetailDrawer({
                   >
                     {classNameForKey(classes, key)}
                     <span className="text-slate-400">·</span>
-                    {formatTokenLabel(draft, key)}
+                    {formatBillingLabel(draft, key, classes)}
                   </span>
                 ))}
               </div>
             )}
+
+            <div className="border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-medium text-slate-800">Payment history</h3>
+              {studentPayments.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-500">No payments recorded yet.</p>
+              ) : (
+                <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+                  {studentPayments.slice(0, 20).map((record) => (
+                    <li
+                      key={record.id}
+                      className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-700"
+                    >
+                      {formatPaymentRecord(
+                        record,
+                        classNameForKey(classes, record.classKey),
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
 
           <button

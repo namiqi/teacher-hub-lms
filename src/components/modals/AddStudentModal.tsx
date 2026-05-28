@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { Minus, Plus, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { Class, CreateStudentInput } from '../../types'
 
@@ -11,9 +11,11 @@ interface AddStudentModalProps {
 
 const EMPTY: CreateStudentInput = {
   name: '',
-  parentContact: '',
+  studentPhone: '',
+  parentPhone: '',
   grade: '',
   classKey: '',
+  initialTokenBalance: 0,
 }
 
 export default function AddStudentModal({
@@ -41,9 +43,11 @@ export default function AddStudentModal({
     e.preventDefault()
     onAdd({
       name: form.name.trim(),
-      parentContact: form.parentContact.trim(),
-      grade: form.grade.trim(),
+      studentPhone: form.studentPhone?.trim() ?? '',
+      parentPhone: form.parentPhone?.trim() ?? '',
+      grade: form.grade?.trim() ?? '',
       classKey: form.classKey,
+      initialTokenBalance: Math.max(0, form.initialTokenBalance ?? 0),
     })
     setForm(EMPTY)
   }
@@ -91,23 +95,34 @@ export default function AddStudentModal({
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">
-              Parent Contact (Phone / WhatsApp)
+              Student Phone (Optional)
             </span>
             <input
-              required
-              value={form.parentContact}
-              onChange={(e) => setForm((f) => ({ ...f, parentContact: e.target.value }))}
+              value={form.studentPhone ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, studentPhone: e.target.value }))}
               placeholder="+1 (555) 000-0000"
               className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </label>
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Age / Grade</span>
+            <span className="text-sm font-medium text-slate-700">
+              Parent Phone (Optional)
+            </span>
             <input
-              required
-              value={form.grade}
+              value={form.parentPhone ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, parentPhone: e.target.value }))}
+              placeholder="+1 (555) 111-1111"
+              className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Grade / Status (Optional)
+            </span>
+            <input
+              value={form.grade ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, grade: e.target.value }))}
-              placeholder="e.g. Grade 9"
+              placeholder="e.g. Grade 9 or Adult Learner"
               className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </label>
@@ -128,6 +143,42 @@ export default function AddStudentModal({
                 </option>
               ))}
             </select>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Initial Token Balance
+            </span>
+            <div className="mt-1.5 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    initialTokenBalance: Math.max(0, (f.initialTokenBalance ?? 0) - 1),
+                  }))
+                }
+                className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-slate-700 shadow-sm hover:bg-slate-100"
+                aria-label="Decrease initial token balance"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <span className="text-sm font-semibold text-[#185560]">
+                {Math.max(0, form.initialTokenBalance ?? 0)}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    initialTokenBalance: Math.max(0, (f.initialTokenBalance ?? 0) + 1),
+                  }))
+                }
+                className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-slate-700 shadow-sm hover:bg-slate-100"
+                aria-label="Increase initial token balance"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
           </label>
 
           <div className="flex gap-3 pt-2">

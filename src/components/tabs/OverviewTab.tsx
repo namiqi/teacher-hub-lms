@@ -1,15 +1,18 @@
-import {
-  AlertCircle,
-  BookOpen,
-  Calendar,
-  Clock,
-  CreditCard,
-  Users,
-} from 'lucide-react'
+import { BookOpen, Calendar, Clock, Users } from 'lucide-react'
 import { useMemo } from 'react'
 import { formatTime12h } from '../../lib/classSchedule'
-import { classNameForKey, getTokenBalance } from '../../lib/studentTokens'
-import type { Class, Student } from '../../types'
+import { buildActionInboxItems } from '../../lib/actionInbox'
+import ActionInbox from '../ActionInbox'
+import OnboardingPanel from '../OnboardingPanel'
+import PendingJoinRequestsPanel from '../PendingJoinRequestsPanel'
+import { isWorkspaceSetup } from '../../lib/workspace'
+import type {
+  Class,
+  JoinRequest,
+  PaymentRecord,
+  Student,
+  StudentAccount,
+} from '../../types'
 
 const CORPORATE = {
   blue: '#185560',
@@ -20,70 +23,52 @@ const CORPORATE = {
 interface OverviewTabProps {
   students: Student[]
   classes: Class[]
-}
-
-interface RenewalEntry {
-  studentId: number
-  studentName: string
-  classKey: string
-  className: string
-  balance: number
+  payments: PaymentRecord[]
+  joinRequests: JoinRequest[]
+  studentAccounts: StudentAccount[]
+  onApproveJoinRequest: (requestId: string) => void
+  onRejectJoinRequest: (requestId: string) => void
+  onCreateClass: () => void
+  onGoToStudents: () => void
+  onGoToAttendance: () => void
 }
 
 function todayWeekday(): string {
   return new Date().toLocaleDateString('en-US', { weekday: 'long' })
 }
 
-function formatRenewalLine(entry: RenewalEntry): string {
-  if (entry.balance < 0) {
-    return `${entry.studentName} — ${entry.className} (${entry.balance} overdue)`
-  }
-  return `${entry.studentName} — ${entry.className} (${entry.balance} left)`
-}
-
 function isClassScheduledToday(cls: Class, weekday: string): boolean {
   return cls.weeklySchedule.some((d) => d.day === weekday && d.enabled)
 }
 
-export default function OverviewTab({ students, classes }: OverviewTabProps) {
+export default function OverviewTab({
+  students,
+  classes,
+  payments,
+  joinRequests,
+  studentAccounts,
+  onApproveJoinRequest,
+  onRejectJoinRequest,
+  onCreateClass,
+  onGoToStudents,
+  onGoToAttendance,
+}: OverviewTabProps) {
+  const showOnboarding = !isWorkspaceSetup(classes, students)
   const activeStudents = useMemo(
     () => students.filter((s) => s.status !== 'archived'),
     [students],
   )
 
   const weekday = todayWeekday()
+  const actionItems = useMemo(
+    () => buildActionInboxItems(students, classes, payments),
+    [students, classes, payments],
+  )
 
   const classesToday = useMemo(
     () => classes.filter((c) => isClassScheduledToday(c, weekday)),
     [classes, weekday],
   )
-
-  const renewalEntries = useMemo(() => {
-    const entries: RenewalEntry[] = []
-    for (const student of activeStudents) {
-      for (const classKey of student.enrolledClasses) {
-        const balance = getTokenBalance(student, classKey)
-        if (balance <= 0) {
-          entries.push({
-            studentId: student.id,
-            studentName: student.name,
-            classKey,
-            className: classNameForKey(classes, classKey),
-            balance,
-          })
-        }
-      }
-    }
-    return entries.sort((a, b) => a.balance - b.balance)
-  }, [activeStudents, classes])
-
-  const studentsNeedingPayment = useMemo(() => {
-    const ids = new Set<number>()
-    for (const entry of renewalEntries) {
-      ids.add(entry.studentId)
-    }
-    return ids.size
-  }, [renewalEntries])
 
   const todaysSessions = useMemo(() => {
     return classesToday
@@ -98,6 +83,8 @@ export default function OverviewTab({ students, classes }: OverviewTabProps) {
       })
       .sort((a, b) => a.time.localeCompare(b.time))
   }, [classesToday, weekday])
+
+  const attentionCount = actionItems.length
 
   const metrics = [
     {
@@ -116,19 +103,91 @@ export default function OverviewTab({ students, classes }: OverviewTabProps) {
       icon: BookOpen,
     },
     {
-      label: 'Payment Reminders',
-      value: String(studentsNeedingPayment),
+      label: 'Needs Attention',
+      value: String(attentionCount),
       change:
-        renewalEntries.length === 0
-          ? 'All accounts current'
-          : `${renewalEntries.length} class balance${renewalEntries.length === 1 ? '' : 's'} at or below zero`,
-      icon: AlertCircle,
+        attentionCount === 0
+          ? 'Payments and balances are current'
+          : `${attentionCount} payment or balance item${attentionCount === 1 ? '' : 's'}`,
+      icon: Calendar,
     },
   ]
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-5 md:space-y-6">
+      {showOnboarding && (
+        <OnboardingPanel
+          classes={classes}
+          students={students}
+          onCreateClass={onCreateClass}
+          onGoToStudents={onGoToStudents}
+          onGoToAttendance={onGoToAttendance}
+        />
+      )}
+
+      <PendingJoinRequestsPanel
+        classes={classes}
+        joinRequests={joinRequests}
+        studentAccounts={studentAccounts}
+        onApprove={onApproveJoinRequest}
+        onReject={onRejectJoinRequest}
+      />
+
+      <section
+        className="rounded-xl border bg-white shadow-sm"
+        style={{ borderColor: CORPORATE.blueBorder }}
+      >
+        <div
+          className="flex items-center gap-2 border-b px-4 py-3 md:px-6 md:py-4"
+          style={{ borderColor: CORPORATE.blueBorder }}
+        >
+          <Calendar className="h-5 w-5" style={{ color: CORPORATE.blue }} strokeWidth={2} />
+          <h2 className="font-semibold text-slate-900">Today&apos;s schedule</h2>
+        </div>
+        {todaysSessions.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-slate-500 md:px-6 md:py-10">
+            No classes scheduled for today.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {todaysSessions.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={onGoToAttendance}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[rgba(24,85,96,0.04)] md:gap-4 md:px-6 md:py-4"
+                >
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: CORPORATE.blueMuted }}
+                  >
+                    <Clock className="h-4 w-4" style={{ color: CORPORATE.blue }} strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-slate-900">{item.name}</p>
+                    <p className="text-sm text-slate-500">{item.location}</p>
+                  </div>
+                  <span
+                    className="shrink-0 text-sm font-medium"
+                    style={{ color: CORPORATE.blue }}
+                  >
+                    {item.time}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <ActionInbox
+        students={students}
+        classes={classes}
+        payments={payments}
+        onGoToStudents={onGoToStudents}
+      />
+
+      <div className="hidden gap-5 sm:grid-cols-2 lg:grid-cols-3 md:grid">
         {metrics.map((metric) => (
           <div
             key={metric.label}
@@ -158,104 +217,6 @@ export default function OverviewTab({ students, classes }: OverviewTabProps) {
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section
-          className="rounded-xl border bg-white shadow-sm"
-          style={{ borderColor: CORPORATE.blueBorder }}
-        >
-          <div
-            className="flex items-center gap-2 border-b px-6 py-4"
-            style={{ borderColor: CORPORATE.blueBorder }}
-          >
-            <Calendar className="h-5 w-5" style={{ color: CORPORATE.blue }} strokeWidth={2} />
-            <h2 className="font-semibold text-slate-900">Today&apos;s Schedule</h2>
-            <span className="ml-auto text-xs font-medium text-slate-400">{weekday}</span>
-          </div>
-          {todaysSessions.length === 0 ? (
-            <p className="px-6 py-10 text-center text-sm text-slate-500">
-              No classes scheduled for today.
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {todaysSessions.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center gap-4 px-6 py-4 transition-colors hover:bg-[rgba(24,85,96,0.04)]"
-                >
-                  <div
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-                    style={{ backgroundColor: CORPORATE.blueMuted }}
-                  >
-                    <Clock className="h-4 w-4" style={{ color: CORPORATE.blue }} strokeWidth={2} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-slate-900">{item.name}</p>
-                    <p className="text-sm text-slate-500">{item.location}</p>
-                  </div>
-                  <span
-                    className="shrink-0 text-sm font-medium"
-                    style={{ color: CORPORATE.blue }}
-                  >
-                    {item.time}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section
-          className="rounded-xl border bg-white shadow-sm"
-          style={{ borderColor: CORPORATE.blueBorder }}
-        >
-          <div
-            className="flex items-center gap-2 border-b px-6 py-4"
-            style={{ borderColor: CORPORATE.blueBorder }}
-          >
-            <CreditCard className="h-5 w-5" style={{ color: CORPORATE.blue }} strokeWidth={2} />
-            <h2 className="font-semibold text-slate-900">💳 Renewals Due</h2>
-            {renewalEntries.length > 0 && (
-              <span
-                className="ml-auto rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                style={{
-                  backgroundColor: 'rgba(244, 63, 94, 0.1)',
-                  color: '#be123c',
-                }}
-              >
-                {renewalEntries.length}
-              </span>
-            )}
-          </div>
-          {renewalEntries.length === 0 ? (
-            <div className="px-6 py-10 text-center">
-              <p className="text-sm font-medium" style={{ color: CORPORATE.blue }}>
-                All student accounts are fully paid up.
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                No class balances are at or below zero.
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {renewalEntries.map((entry) => (
-                <li
-                  key={`${entry.studentId}-${entry.classKey}`}
-                  className="flex items-start gap-3 px-6 py-4 transition-colors hover:bg-[rgba(24,85,96,0.04)]"
-                >
-                  <AlertCircle
-                    className="mt-0.5 h-4 w-4 shrink-0 text-rose-500"
-                    strokeWidth={2}
-                  />
-                  <p className="text-sm font-medium text-slate-800">
-                    {formatRenewalLine(entry)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </div>
     </div>
   )

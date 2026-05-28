@@ -57,3 +57,18 @@ export function buildInitialLedger(): AttendanceLedger {
 
   return { columns, recordsByClass }
 }
+
+/** Fresh workspace: one column (today), no attendance records yet. */
+export function buildEmptyLedger(): AttendanceLedger {
+  const today = new Date().toISOString().slice(0, 10)
+  return {
+    columns: [
+      {
+        id: 'col-today',
+        dateKey: today,
+        label: todayLabel(),
+      },
+    ],
+    recordsByClass: {},
+  }
+}

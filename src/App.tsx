@@ -2,10 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import LandingPage from './components/auth/LandingPage'
 import LoginView from './components/auth/LoginView'
 import SignupView from './components/auth/SignupView'
+import StudentLoginView from './components/auth/StudentLoginView'
+import StudentSignupView from './components/auth/StudentSignupView'
+import StudentPortal from './components/student/StudentPortal'
 import Header from './components/Header'
 import CreateClassModal from './components/modals/CreateClassModal'
 import ManageClassModal from './components/modals/ManageClassModal'
 import { generateUniqueClassKey } from './lib/classKeys'
+import { generateUniqueClassJoinCode } from './lib/joinCodes'
+import {
+  approveJoinRequest,
+  pendingRequestsForTeacher,
+} from './lib/joinRequests'
 import { createDefaultWeeklySchedule, formatClassSchedule } from './lib/classSchedule'
 import {
   getTokenDeltaForAttendanceChange,
@@ -17,31 +25,58 @@ import {
   ensureTokenMapsForEnrollment,
   syncClassRosters,
 } from './lib/studentTokens'
+import MobileBottomNav from './components/MobileBottomNav'
+import MobileTopBar from './components/MobileTopBar'
 import Sidebar from './components/Sidebar'
 import AttendanceTab from './components/tabs/AttendanceTab'
 import MyClassesTab from './components/tabs/MyClassesTab'
+import TeacherClassWorkspace from './components/teacher/TeacherClassWorkspace'
+import {
+  buildAnnouncementFromInput,
+  buildAssignmentFromInput,
+} from './lib/assignments'
 import OverviewTab from './components/tabs/OverviewTab'
 import SettingsTab from './components/tabs/SettingsTab'
 import StudentsTab from './components/tabs/StudentsTab'
+import TeacherAssignmentsTab from './components/tabs/TeacherAssignmentsTab'
 import { CLASS_GRADIENTS } from './data/classes'
 import { STUDENT_AVATAR_COLORS } from './data/students'
 import { NEW_STUDENT_TOKEN_CAPACITY } from './lib/classKeys'
+import type { TopUpConfirmPayload } from './components/modals/TopUpModal'
+import { applyMonthlyPayment, classUsesTokens } from './lib/billing'
+import { logger } from './lib/logger'
+import { createPaymentId, packageLessons } from './lib/payments'
 import {
+  buildAppBackup,
   clearSession,
   getInitials,
+  loadAssignments,
   loadAttendance,
   loadClasses,
-  loadSession,
+  loadPayments,
+  loadJoinRequests,
+  loadSessionRole,
+  loadStudentAccount,
+  loadStudentAccounts,
   loadStudents,
   loadUser,
+  parseAppBackup,
+  persistAppBackup,
+  registerStudentAccount,
   saveAttendance,
   saveClasses,
   saveDevBypassUser,
-  saveSession,
+  saveAssignments,
+  saveJoinRequests,
+  savePayments,
+  saveStudentAccounts,
+  saveStudentSession,
   saveStudents,
+  saveTeacherSession,
   saveUser,
 } from './lib/storage'
 import { studentEmailFromName } from './lib/utils'
+import { initializeEmptyWorkspace, seedDemoWorkspace } from './lib/workspace'
 import type {
   AppView,
   AttendanceLedger,
@@ -50,11 +85,23 @@ import type {
   CreateClassInput,
   CreateStudentInput,
   ManageClassUpdate,
+  AnnouncementFormInput,
+  Assignment,
+  AssignmentFormInput,
+  JoinRequest,
+  PaymentRecord,
   Student,
+  StudentAccount,
   TabId,
-  TopUpPackage,
   User,
 } from './types'
+
+function getInitialView(): AppView {
+  const role = loadSessionRole()
+  if (role === 'student') return 'student-portal'
+  if (role === 'teacher') return 'dashboard'
+  return 'landing'
+}
 
 const DEFAULT_USER: User = {
   name: 'Sarah Johnson',
@@ -64,19 +111,13 @@ const DEFAULT_USER: User = {
   isAuthenticated: true,
 }
 
-const PACKAGE_LESSONS: Record<Exclude<TopUpPackage, 'custom'>, number> = {
-  standard: 8,
-  intensive: 12,
-}
-
 function App() {
-  const [currentView, setCurrentView] = useState<AppView>(() =>
-    loadSession() ? 'dashboard' : 'landing',
-  )
+  const [currentView, setCurrentView] = useState<AppView>(getInitialView)
   const [user, setUser] = useState<User>(() => loadUser() ?? DEFAULT_USER)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [manageClassId, setManageClassId] = useState<number | null>(null)
+  const [teacherClassId, setTeacherClassId] = useState<number | null>(null)
   const [classes, setClasses] = useState<Class[]>(loadClasses)
   const [students, setStudents] = useState<Student[]>(loadStudents)
   const [attendance, setAttendance] = useState<AttendanceLedger>(() =>
@@ -90,6 +131,22 @@ function App() {
       'math_201'
     )
   })
+  const [payments, setPayments] = useState<PaymentRecord[]>(loadPayments)
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>(loadJoinRequests)
+  const [studentAccounts, setStudentAccounts] = useState<StudentAccount[]>(
+    loadStudentAccounts,
+  )
+  const [studentAccount, setStudentAccount] = useState<StudentAccount | null>(
+    () => (loadSessionRole() === 'student' ? loadStudentAccount() : null),
+  )
+  const [assignments, setAssignments] = useState<Assignment[]>(() =>
+    loadAssignments(loadClasses()),
+  )
+
+  const pendingJoinCount = useMemo(
+    () => pendingRequestsForTeacher(joinRequests, classes).length,
+    [joinRequests, classes],
+  )
 
   const activeClasses = useMemo(
     () => classes.filter((c) => c.status !== 'archived'),
@@ -99,6 +156,9 @@ function App() {
   const shouldPersistClasses = useRef(false)
   const shouldPersistStudents = useRef(false)
   const shouldPersistAttendance = useRef(false)
+  const shouldPersistPayments = useRef(false)
+  const shouldPersistJoinRequests = useRef(false)
+  const shouldPersistAssignments = useRef(false)
 
   useEffect(() => {
     if (!shouldPersistClasses.current) return
@@ -115,6 +175,62 @@ function App() {
     saveAttendance(attendance)
   }, [attendance])
 
+  useEffect(() => {
+    if (!shouldPersistPayments.current) return
+    savePayments(payments)
+  }, [payments])
+
+  useEffect(() => {
+    if (!shouldPersistJoinRequests.current) return
+    saveJoinRequests(joinRequests)
+  }, [joinRequests])
+
+  useEffect(() => {
+    if (!shouldPersistAssignments.current) return
+    saveAssignments(assignments)
+  }, [assignments])
+
+  useEffect(() => {
+    if (
+      currentView === 'student-portal' ||
+      currentView === 'student-login' ||
+      currentView === 'student-signup'
+    ) {
+      setClasses(loadClasses())
+    }
+  }, [currentView])
+
+  const refreshJoinRequests = useCallback(() => {
+    setJoinRequests(loadJoinRequests())
+  }, [])
+
+  const refreshAssignments = useCallback(() => {
+    setAssignments(loadAssignments(classes))
+  }, [classes])
+
+  useEffect(() => {
+    if (currentView !== 'dashboard') return
+    refreshJoinRequests()
+    refreshAssignments()
+  }, [currentView, activeTab, refreshJoinRequests, refreshAssignments])
+
+  useEffect(() => {
+    if (currentView !== 'dashboard' && currentView !== 'student-portal') return
+    const onSync = () => {
+      refreshJoinRequests()
+      refreshAssignments()
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') onSync()
+    }
+    window.addEventListener('focus', onSync)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', onSync)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [currentView, refreshJoinRequests, refreshAssignments])
+
   const markPersistStudents = () => {
     shouldPersistStudents.current = true
   }
@@ -128,12 +244,29 @@ function App() {
       setUser(nextUser)
       saveUser(nextUser)
     }
-    saveSession()
+    saveTeacherSession()
     setCurrentView('dashboard')
   }, [])
 
   const handleDevBypass = useCallback(() => {
     const devUser = saveDevBypassUser()
+    const demo = seedDemoWorkspace()
+    setClasses(demo.classes)
+    setStudents(demo.students)
+    setAttendance(demo.attendance)
+    setPayments([])
+    setJoinRequests([])
+    setStudentAccounts(loadStudentAccounts())
+    setAssignments(loadAssignments(demo.classes))
+    setAttendanceClassKey(
+      demo.classes.find((c) => c.status === 'active')?.classKey ?? '',
+    )
+    shouldPersistClasses.current = false
+    shouldPersistPayments.current = false
+    shouldPersistStudents.current = false
+    shouldPersistAttendance.current = false
+    shouldPersistJoinRequests.current = false
+    shouldPersistAssignments.current = false
     setUser(devUser)
     setCurrentView('dashboard')
   }, [])
@@ -153,7 +286,19 @@ function App() {
         role: 'Teacher',
         isAuthenticated: true,
       }
+      const empty = initializeEmptyWorkspace()
+      setClasses(empty.classes)
+      setStudents(empty.students)
+      setAttendance(empty.attendance)
+      setPayments([])
+      setJoinRequests([])
+      setAttendanceClassKey('')
+      shouldPersistClasses.current = false
+      shouldPersistStudents.current = false
+      shouldPersistAttendance.current = false
+      shouldPersistPayments.current = false
       enterDashboard(nextUser)
+      setActiveTab('overview')
     },
     [enterDashboard],
   )
@@ -162,6 +307,9 @@ function App() {
     setClasses((prev) => {
       const nextId = prev.reduce((max, c) => Math.max(max, c.id), 0) + 1
       const existingKeys = new Set(prev.map((c) => c.classKey))
+      const existingJoinCodes = new Set(
+        prev.map((c) => c.joinCode).filter(Boolean) as string[],
+      )
       const classKey = generateUniqueClassKey(input.name, existingKeys, nextId)
       const weeklySchedule = createDefaultWeeklySchedule()
       const newClass: Class = {
@@ -175,6 +323,9 @@ function App() {
         studentIds: [],
         weeklySchedule,
         location: '',
+        billingMode: input.billingMode ?? 'prepaid',
+        monthlyFee: input.monthlyFee,
+        joinCode: generateUniqueClassJoinCode(existingJoinCodes),
       }
       return [...prev, newClass]
     })
@@ -204,6 +355,8 @@ function App() {
   const applyAttendanceTokenTransitions = useCallback(
     (classKey: string, transitions: AttendanceCellTransition[]) => {
       if (transitions.length === 0) return
+      const cls = classes.find((c) => c.classKey === classKey)
+      if (cls && !classUsesTokens(cls)) return
 
       setStudents((prev) => {
         let next = prev
@@ -218,7 +371,7 @@ function App() {
       })
       markPersistStudents()
     },
-    [],
+    [classes],
   )
 
   const handleLedgerChange = useCallback(
@@ -235,40 +388,209 @@ function App() {
   )
 
   const handleTopUp = useCallback(
+    (payload: TopUpConfirmPayload) => {
+      const {
+        studentId,
+        classKey,
+        packageType,
+        customAmount,
+        paidUpfront,
+        paidMonthKey,
+        amountDollars,
+        note,
+      } = payload
+      const cls = classes.find((c) => c.classKey === classKey)
+      const isMonthly = cls?.billingMode === 'monthly'
+
+      if (isMonthly && paidMonthKey) {
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.id === studentId
+              ? applyMonthlyPayment(s, classKey, paidMonthKey)
+              : s,
+          ),
+        )
+        markPersistStudents()
+      } else {
+        const added = packageLessons(packageType, customAmount)
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.id === studentId ? applyTopUp(s, classKey, added) : s,
+          ),
+        )
+        markPersistStudents()
+      }
+
+      const record: PaymentRecord = {
+        id: createPaymentId(),
+        studentId,
+        classKey,
+        createdAt: new Date().toISOString(),
+        type: isMonthly ? 'monthly_fee' : 'prepaid_topup',
+        lessonsAdded: isMonthly ? undefined : packageLessons(packageType, customAmount),
+        packageType: isMonthly ? undefined : packageType,
+        paidMonthKey: isMonthly ? paidMonthKey : undefined,
+        amountDollars: isMonthly ? amountDollars : undefined,
+        paidUpfront,
+        note,
+      }
+      setPayments((prev) => [...prev, record])
+      shouldPersistPayments.current = true
+      logger.info('Payment recorded', {
+        type: record.type,
+        studentId,
+        classKey,
+        paidUpfront,
+      })
+    },
+    [classes],
+  )
+
+  const handleSaveUser = useCallback((nextUser: User) => {
+    setUser(nextUser)
+    saveUser(nextUser)
+  }, [])
+
+  const handleSaveAssignment = useCallback(
     (
-      studentId: number,
       classKey: string,
-      packageType: TopUpPackage,
-      customAmount: number | undefined,
-      _paidUpfront: boolean,
+      input: AssignmentFormInput,
+      mode: 'draft' | 'publish',
+      existingId?: string,
     ) => {
-      const added =
-        packageType === 'custom'
-          ? (customAmount ?? 8)
-          : PACKAGE_LESSONS[packageType]
-
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === studentId ? applyTopUp(s, classKey, added) : s,
-        ),
-      )
-
-      markPersistStudents()
+      setAssignments((prev) => {
+        const existing = existingId
+          ? prev.find((a) => a.id === existingId)
+          : undefined
+        const next = buildAssignmentFromInput(
+          classKey,
+          input,
+          mode === 'draft' ? 'draft' : 'published',
+          existing,
+        )
+        if (existingId) {
+          return prev.map((a) => (a.id === existingId ? next : a))
+        }
+        return [...prev, next]
+      })
+      shouldPersistAssignments.current = true
+      logger.info('Assignment saved', { classKey, mode, existingId })
     },
     [],
   )
+
+  const handleSaveAnnouncement = useCallback(
+    (
+      classKey: string,
+      input: AnnouncementFormInput,
+      mode: 'draft' | 'publish',
+      existingId?: string,
+    ) => {
+      setAssignments((prev) => {
+        const existing = existingId
+          ? prev.find((a) => a.id === existingId)
+          : undefined
+        const next = buildAnnouncementFromInput(
+          classKey,
+          input,
+          mode === 'draft' ? 'draft' : 'published',
+          existing,
+        )
+        if (existingId) {
+          return prev.map((a) => (a.id === existingId ? next : a))
+        }
+        return [...prev, next]
+      })
+      shouldPersistAssignments.current = true
+      logger.info('Announcement saved', { classKey, mode, existingId })
+    },
+    [],
+  )
+
+  const handleDeleteAssignment = useCallback((assignmentId: string) => {
+    setAssignments((prev) => prev.filter((a) => a.id !== assignmentId))
+    shouldPersistAssignments.current = true
+  }, [])
+
+  const handleExportBackup = useCallback(() => {
+    const backup = buildAppBackup(
+      classes,
+      students,
+      attendance,
+      payments,
+      user,
+      joinRequests,
+      studentAccounts,
+      assignments,
+    )
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `teacher-hub-backup-${new Date().toISOString().slice(0, 10)}.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    logger.info('Backup exported')
+  }, [classes, students, attendance, payments, user, joinRequests, studentAccounts, assignments])
+
+  const handleImportBackup = useCallback(async (file: File) => {
+    const text = await file.text()
+    const backup = parseAppBackup(text)
+    persistAppBackup(backup)
+    setClasses(backup.classes)
+    setStudents(backup.students)
+    setAttendance(backup.attendance)
+    setPayments(backup.payments ?? [])
+    setJoinRequests(backup.joinRequests ?? [])
+    setStudentAccounts(backup.studentAccounts ?? [])
+    setAssignments(loadAssignments(backup.classes))
+    if (backup.user) setUser(backup.user)
+    setAttendanceClassKey(
+      backup.classes.find((c) => c.status === 'active')?.classKey ?? '',
+    )
+    shouldPersistClasses.current = false
+    shouldPersistStudents.current = false
+    shouldPersistAttendance.current = false
+    shouldPersistPayments.current = false
+    shouldPersistJoinRequests.current = false
+    shouldPersistAssignments.current = false
+  }, [])
+
+  const handleResetWorkspace = useCallback(() => {
+    const empty = initializeEmptyWorkspace()
+    setClasses(empty.classes)
+    setStudents(empty.students)
+    setAttendance(empty.attendance)
+    setPayments([])
+    setJoinRequests([])
+    setStudentAccounts([])
+    setAssignments([])
+    setTeacherClassId(null)
+    setAttendanceClassKey('')
+    shouldPersistClasses.current = false
+    shouldPersistStudents.current = false
+    shouldPersistAttendance.current = false
+    shouldPersistPayments.current = false
+    shouldPersistJoinRequests.current = false
+    shouldPersistAssignments.current = false
+    logger.info('Workspace reset from settings')
+  }, [])
 
   const handleAddStudent = useCallback(
     (input: CreateStudentInput) => {
       setStudents((prev) => {
         const nextId = prev.reduce((max, s) => Math.max(max, s.id), 0) + 1
+        const initialTokenBalance = Math.max(0, input.initialTokenBalance ?? 0)
         const maps = ensureTokenMapsForEnrollment(
           {
             id: nextId,
             name: input.name,
             email: '',
-            parentContact: input.parentContact,
-            grade: input.grade,
+            studentPhone: input.studentPhone ?? '',
+            parentPhone: input.parentPhone ?? '',
+            grade: input.grade ?? '',
             status: 'active',
             initials: '',
             avatarColor: '',
@@ -277,16 +599,20 @@ function App() {
             tokenCapacityByClass: {},
           },
           [input.classKey],
-          0,
+          initialTokenBalance,
         )
-        maps.tokenCapacityByClass[input.classKey] = NEW_STUDENT_TOKEN_CAPACITY
+        maps.tokenCapacityByClass[input.classKey] = Math.max(
+          NEW_STUDENT_TOKEN_CAPACITY,
+          initialTokenBalance,
+        )
 
         const newStudent: Student = {
           id: nextId,
           name: input.name,
           email: studentEmailFromName(input.name),
-          parentContact: input.parentContact,
-          grade: input.grade,
+          studentPhone: input.studentPhone ?? '',
+          parentPhone: input.parentPhone ?? '',
+          grade: input.grade ?? '',
           status: 'active',
           initials: getInitials(input.name),
           avatarColor:
@@ -362,10 +688,13 @@ function App() {
               if (c.id === classId) {
                 return {
                   ...c,
+                  name: update.name,
                   studentIds: update.studentIds,
                   students: update.studentIds.length,
                   weeklySchedule: update.weeklySchedule,
                   location: update.location,
+                  billingMode: update.billingMode,
+                  monthlyFee: update.monthlyFee,
                   schedule: scheduleStr,
                 }
               }
@@ -446,6 +775,126 @@ function App() {
     markPersistStudents()
   }, [])
 
+  const handleRegenerateJoinCode = useCallback((classId: number) => {
+    setClasses((prev) => {
+      const codes = new Set(
+        prev
+          .filter((c) => c.id !== classId)
+          .map((c) => c.joinCode)
+          .filter(Boolean) as string[],
+      )
+      return prev.map((c) =>
+        c.id === classId
+          ? { ...c, joinCode: generateUniqueClassJoinCode(codes) }
+          : c,
+      )
+    })
+    shouldPersistClasses.current = true
+    logger.info('Class join code regenerated', { classId })
+  }, [])
+
+  const handleApproveJoinRequest = useCallback(
+    (requestId: string) => {
+      const request = joinRequests.find((r) => r.id === requestId)
+      if (!request || request.status !== 'pending') return
+
+      const result = approveJoinRequest(
+        request,
+        students,
+        classes,
+        studentAccounts,
+      )
+      const linkedId = result.accounts.find(
+        (a) => a.id === request.studentAccountId,
+      )?.linkedStudentId
+
+      setStudents(result.students)
+      setClasses((clsPrev) => syncClassRosters(clsPrev, result.students))
+      shouldPersistClasses.current = true
+      shouldPersistStudents.current = true
+
+      if (linkedId) {
+        setAttendance((attPrev) => {
+          const classRecords = {
+            ...(attPrev.recordsByClass[request.classKey] ?? {}),
+          }
+          if (!classRecords[linkedId]) {
+            classRecords[linkedId] = Object.fromEntries(
+              attPrev.columns.map((col) => [
+                col.dateKey,
+                'unset' as AttendanceStatus,
+              ]),
+            )
+          }
+          return {
+            ...attPrev,
+            recordsByClass: {
+              ...attPrev.recordsByClass,
+              [request.classKey]: classRecords,
+            },
+          }
+        })
+        markPersistAttendance()
+      }
+
+      saveStudentAccounts(result.accounts)
+      setStudentAccounts(result.accounts)
+      setJoinRequests((prev) =>
+        prev.map((r) => (r.id === requestId ? result.request : r)),
+      )
+      shouldPersistJoinRequests.current = true
+    },
+    [joinRequests, students, classes, studentAccounts],
+  )
+
+  const handleRejectJoinRequest = useCallback((requestId: string) => {
+    setJoinRequests((prev) =>
+      prev.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              status: 'rejected' as const,
+              reviewedAt: new Date().toISOString(),
+            }
+          : r,
+      ),
+    )
+    shouldPersistJoinRequests.current = true
+    logger.info('Join request rejected', { requestId })
+  }, [])
+
+  const handleStudentSubmitJoin = useCallback((request: JoinRequest) => {
+    setJoinRequests((prev) => [...prev, request])
+    shouldPersistJoinRequests.current = true
+    logger.info('Join request submitted', { classKey: request.classKey })
+  }, [])
+
+  const handleStudentSignUp = useCallback((displayName: string, email: string) => {
+    try {
+      const account = registerStudentAccount(displayName, email)
+      saveStudentSession(account)
+      setStudentAccount(account)
+      setStudentAccounts(loadStudentAccounts())
+      setCurrentView('student-portal')
+    } catch (err) {
+      throw err
+    }
+  }, [])
+
+  const handleStudentSignIn = useCallback((accountId: number) => {
+    const account = loadStudentAccounts().find((a) => a.id === accountId)
+    if (!account) return
+    saveStudentSession(account)
+    setStudentAccount(account)
+    setCurrentView('student-portal')
+  }, [])
+
+  const handleStudentSignOut = useCallback(() => {
+    clearSession()
+    setStudentAccount(null)
+    setCurrentView('landing')
+  }, [])
+
   const handleDeleteStudent = useCallback((studentId: number) => {
     setStudents((prev) => {
       const next = prev.filter((s) => s.id !== studentId)
@@ -470,7 +919,53 @@ function App() {
       <LandingPage
         onSignIn={() => setCurrentView('login')}
         onGetStarted={() => setCurrentView('signup')}
+        onStudentPortal={() => setCurrentView('student-login')}
         onDevBypass={handleDevBypass}
+      />
+    )
+  }
+
+  if (currentView === 'student-login') {
+    return (
+      <StudentLoginView
+        onSignIn={handleStudentSignIn}
+        onGoToSignup={() => setCurrentView('student-signup')}
+        onBack={() => setCurrentView('landing')}
+      />
+    )
+  }
+
+  if (currentView === 'student-signup') {
+    return (
+      <StudentSignupView
+        onSignUp={handleStudentSignUp}
+        onGoToLogin={() => setCurrentView('student-login')}
+        onBack={() => setCurrentView('landing')}
+      />
+    )
+  }
+
+  if (currentView === 'student-portal') {
+    if (!studentAccount) {
+      return (
+        <StudentLoginView
+          onSignIn={handleStudentSignIn}
+          onGoToSignup={() => setCurrentView('student-signup')}
+          onBack={() => setCurrentView('landing')}
+        />
+      )
+    }
+    return (
+      <StudentPortal
+        account={studentAccount}
+        classes={classes}
+        students={students}
+        joinRequests={joinRequests}
+        assignments={assignments}
+        payments={payments}
+        attendance={attendance}
+        onSignOut={handleStudentSignOut}
+        onSubmitJoinRequest={handleStudentSubmitJoin}
       />
     )
   }
@@ -504,14 +999,57 @@ function App() {
   const renderTab = () => {
     switch (activeTab) {
       case 'overview':
-        return <OverviewTab students={students} classes={activeClasses} />
-      case 'classes':
+        return (
+          <OverviewTab
+            students={students}
+            classes={activeClasses}
+            payments={payments}
+            joinRequests={joinRequests}
+            studentAccounts={studentAccounts}
+            onApproveJoinRequest={handleApproveJoinRequest}
+            onRejectJoinRequest={handleRejectJoinRequest}
+            onCreateClass={() => setIsModalOpen(true)}
+            onGoToStudents={() => setActiveTab('students')}
+            onGoToAttendance={() => setActiveTab('attendance')}
+          />
+        )
+      case 'assignments':
+        return (
+          <TeacherAssignmentsTab
+            assignments={assignments}
+            classes={activeClasses}
+            onSaveAssignment={handleSaveAssignment}
+            onSaveAnnouncement={handleSaveAnnouncement}
+            onDeleteAssignment={handleDeleteAssignment}
+            onGoToClasses={() => setActiveTab('classes')}
+          />
+        )
+      case 'classes': {
+        const workspaceClass = activeClasses.find((c) => c.id === teacherClassId)
+        if (workspaceClass) {
+          return (
+            <TeacherClassWorkspace
+              cls={workspaceClass}
+              students={students}
+              assignments={assignments}
+              onBack={() => setTeacherClassId(null)}
+              onOpenSettings={() => {
+                setManageClassId(workspaceClass.id)
+              }}
+              onSaveAssignment={handleSaveAssignment}
+              onSaveAnnouncement={handleSaveAnnouncement}
+              onDeleteAssignment={handleDeleteAssignment}
+            />
+          )
+        }
         return (
           <MyClassesTab
             classes={activeClasses}
-            onManageClass={setManageClassId}
+            onOpenClass={setTeacherClassId}
+            onCreateClass={() => setIsModalOpen(true)}
           />
         )
+      }
       case 'attendance':
         return (
           <AttendanceTab
@@ -521,6 +1059,7 @@ function App() {
             activeClassKey={attendanceClassKey}
             onActiveClassChange={setAttendanceClassKey}
             onLedgerChange={handleLedgerChange}
+            onCreateClass={() => setIsModalOpen(true)}
           />
         )
       case 'students':
@@ -528,18 +1067,46 @@ function App() {
           <StudentsTab
             students={students}
             classes={activeClasses}
+            joinRequests={joinRequests}
+            studentAccounts={studentAccounts}
+            onApproveJoinRequest={handleApproveJoinRequest}
+            onRejectJoinRequest={handleRejectJoinRequest}
             onTopUp={handleTopUp}
             onAddStudent={handleAddStudent}
+            onCreateClass={() => setIsModalOpen(true)}
             onUpdateStudent={handleUpdateStudent}
             onArchiveStudent={handleArchiveStudent}
             onReactivateStudent={handleReactivateStudent}
             onDeleteStudent={handleDeleteStudent}
+            payments={payments}
           />
         )
       case 'settings':
-        return <SettingsTab />
+        return (
+          <SettingsTab
+            user={user}
+            onSaveUser={handleSaveUser}
+            onExportBackup={handleExportBackup}
+            onImportBackup={handleImportBackup}
+            onResetWorkspace={handleResetWorkspace}
+            onSignOut={handleSignOut}
+          />
+        )
       default:
-        return <OverviewTab students={students} classes={activeClasses} />
+        return (
+          <OverviewTab
+            students={students}
+            classes={activeClasses}
+            payments={payments}
+            joinRequests={joinRequests}
+            studentAccounts={studentAccounts}
+            onApproveJoinRequest={handleApproveJoinRequest}
+            onRejectJoinRequest={handleRejectJoinRequest}
+            onCreateClass={() => setIsModalOpen(true)}
+            onGoToStudents={() => setActiveTab('students')}
+            onGoToAttendance={() => setActiveTab('attendance')}
+          />
+        )
     }
   }
 
@@ -548,17 +1115,39 @@ function App() {
       <Sidebar
         activeTab={activeTab}
         user={user}
-        onTabChange={setActiveTab}
+        pendingJoinCount={pendingJoinCount}
+        onTabChange={(tab) => {
+          setActiveTab(tab)
+          if (tab !== 'classes') setTeacherClassId(null)
+        }}
         onSignOut={handleSignOut}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <MobileTopBar
+        user={user}
+        activeTab={activeTab}
+        onOpenProfile={() => setActiveTab('settings')}
+        onSignOut={handleSignOut}
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col pt-14 md:pt-0">
         <Header
           activeTab={activeTab}
           onCreateClass={() => setIsModalOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto p-8">{renderTab()}</main>
+        <main className="flex-1 overflow-y-auto p-4 pb-16 md:p-8 md:pb-0">
+          {renderTab()}
+        </main>
       </div>
+
+      <MobileBottomNav
+        activeTab={activeTab}
+        pendingJoinCount={pendingJoinCount}
+        onTabChange={(tab) => {
+          setActiveTab(tab)
+          if (tab !== 'classes') setTeacherClassId(null)
+        }}
+      />
 
       <CreateClassModal
         isOpen={isModalOpen}
@@ -573,6 +1162,7 @@ function App() {
         onClose={() => setManageClassId(null)}
         onSave={handleUpdateClass}
         onDisband={handleDisbandClass}
+        onRegenerateJoinCode={handleRegenerateJoinCode}
       />
     </div>
   )

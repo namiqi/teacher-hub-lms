@@ -6,6 +6,9 @@ export interface ClassDaySchedule {
 
 export type ClassStatus = 'active' | 'archived'
 
+/** Prepaid = lesson credits; monthly = flat fee per month (no token deduction). */
+export type ClassBillingMode = 'prepaid' | 'monthly'
+
 export interface Class {
   id: number
   classKey: string
@@ -17,29 +20,59 @@ export interface Class {
   studentIds: number[]
   weeklySchedule: ClassDaySchedule[]
   location: string
+  billingMode?: ClassBillingMode
+  /** Optional reference amount for monthly classes (display only). */
+  monthlyFee?: number
+  /** Shareable code students enter to request joining (teacher approves). */
+  joinCode?: string
 }
 
 export interface ManageClassUpdate {
+  name: string
   studentIds: number[]
   weeklySchedule: ClassDaySchedule[]
   location: string
+  billingMode: ClassBillingMode
+  monthlyFee?: number
 }
 
 export interface CreateClassInput {
   name: string
+  billingMode?: ClassBillingMode
+  monthlyFee?: number
 }
 
-export type AssignmentStatus = 'active' | 'grading' | 'closed'
+export type AssignmentStatus = 'draft' | 'published' | 'closed'
+
+export type ClassPostKind = 'assignment' | 'announcement'
 
 export interface Assignment {
-  id: number
+  id: string
+  classKey: string
+  kind?: ClassPostKind
   title: string
-  className: string
-  dueDate: string
-  submitted: number
-  total: number
+  description: string
+  dueAt: string
+  createdAt: string
   status: AssignmentStatus
+  /** Optional worksheet / Drive link (MVP attachment) */
+  resourceLink?: string
 }
+
+export interface AssignmentFormInput {
+  title: string
+  description: string
+  dueAt: string
+  resourceLink?: string
+}
+
+export interface AnnouncementFormInput {
+  title: string
+  description: string
+  resourceLink?: string
+}
+
+export type TopUpPackage = 'standard' | 'intensive' | 'custom'
 
 export type StudentStatus = 'active' | 'archived'
 
@@ -47,21 +80,77 @@ export interface Student {
   id: number
   name: string
   email: string
-  parentContact: string
-  grade: string
+  studentPhone?: string
+  parentPhone?: string
+  grade?: string
   status: StudentStatus
   initials: string
   avatarColor: string
   enrolledClasses: string[]
   tokensByClass: Record<string, number>
   tokenCapacityByClass: Record<string, number>
+  /** YYYY-MM through which monthly tuition is paid, per class */
+  paidThroughMonthByClass?: Record<string, string>
+  /** Set when roster row was linked via approved class join */
+  studentAccountId?: number
+}
+
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected'
+
+export interface JoinRequest {
+  id: string
+  classKey: string
+  studentAccountId: number
+  requestedName: string
+  status: JoinRequestStatus
+  createdAt: string
+  reviewedAt?: string
+}
+
+export interface StudentAccount {
+  id: number
+  email: string
+  displayName: string
+  initials: string
+  linkedStudentId?: number
+}
+
+export type PaymentRecordType = 'prepaid_topup' | 'monthly_fee'
+
+export interface PaymentRecord {
+  id: string
+  studentId: number
+  classKey: string
+  createdAt: string
+  type: PaymentRecordType
+  lessonsAdded?: number
+  packageType?: TopUpPackage
+  paidMonthKey?: string
+  amountDollars?: number
+  paidUpfront: boolean
+  note?: string
+}
+
+export interface AppDataBackup {
+  version: 1 | 2
+  exportedAt: string
+  user: User | null
+  classes: Class[]
+  students: Student[]
+  attendance: AttendanceLedger
+  payments: PaymentRecord[]
+  joinRequests?: JoinRequest[]
+  studentAccounts?: StudentAccount[]
+  assignments?: Assignment[]
 }
 
 export interface CreateStudentInput {
   name: string
-  parentContact: string
-  grade: string
+  studentPhone?: string
+  parentPhone?: string
+  grade?: string
   classKey: string
+  initialTokenBalance?: number
 }
 
 export interface User {
@@ -94,11 +183,21 @@ export interface AttendanceLedger {
   recordsByClass: Record<string, Record<number, Record<string, AttendanceStatus>>>
 }
 
-export type AppView = 'landing' | 'login' | 'signup' | 'dashboard'
+export type SessionRole = 'teacher' | 'student'
+
+export type AppView =
+  | 'landing'
+  | 'login'
+  | 'signup'
+  | 'dashboard'
+  | 'student-login'
+  | 'student-signup'
+  | 'student-portal'
 
 export type TabId =
   | 'overview'
   | 'classes'
+  | 'assignments'
   | 'attendance'
   | 'students'
   | 'settings'
@@ -106,6 +205,7 @@ export type TabId =
 export const TAB_LABELS: Record<TabId, string> = {
   overview: 'Overview',
   classes: 'My Classes',
+  assignments: 'Assignments',
   attendance: 'Attendance',
   students: 'Students',
   settings: 'Settings',
@@ -114,9 +214,20 @@ export const TAB_LABELS: Record<TabId, string> = {
 export const HEADER_TITLES: Record<TabId, string> = {
   overview: 'Dashboard Overview',
   classes: 'My Classes',
-  attendance: 'Attendance Ledger',
+  assignments: 'All Assignments',
+  attendance: 'Attendance',
   students: 'Student Directory',
   settings: 'Account Settings',
 }
 
-export type TopUpPackage = 'standard' | 'intensive' | 'custom'
+export type StudentTabId = 'home' | 'requests'
+
+export const STUDENT_TAB_LABELS: Record<StudentTabId, string> = {
+  home: 'Home',
+  requests: 'Join requests',
+}
+
+export const STUDENT_HEADER_TITLES: Record<StudentTabId, string> = {
+  home: 'My classes',
+  requests: 'Join requests',
+}

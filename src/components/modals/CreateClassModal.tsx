@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { CreateClassInput } from '../../types'
+import type { ClassBillingMode, CreateClassInput } from '../../types'
 
 interface CreateClassModalProps {
   isOpen: boolean
@@ -14,10 +14,14 @@ export default function CreateClassModal({
   onCreateClass,
 }: CreateClassModalProps) {
   const [className, setClassName] = useState('')
+  const [billingMode, setBillingMode] = useState<ClassBillingMode>('prepaid')
+  const [monthlyFee, setMonthlyFee] = useState('')
 
   useEffect(() => {
     if (!isOpen) {
       setClassName('')
+      setBillingMode('prepaid')
+      setMonthlyFee('')
       return
     }
 
@@ -36,7 +40,12 @@ export default function CreateClassModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onCreateClass({ name: className.trim() })
+    const fee = monthlyFee.trim() ? parseFloat(monthlyFee) : undefined
+    onCreateClass({
+      name: className.trim(),
+      billingMode,
+      monthlyFee: Number.isFinite(fee) ? fee : undefined,
+    })
   }
 
   return (
@@ -86,17 +95,54 @@ export default function CreateClassModal({
             />
           </label>
 
-          <div className="flex gap-3 pt-2">
+          <fieldset className="rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+            <legend className="px-1 text-sm font-medium text-slate-800">Billing</legend>
+            <div className="mt-2 flex flex-col gap-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="create-billing"
+                  checked={billingMode === 'prepaid'}
+                  onChange={() => setBillingMode('prepaid')}
+                />
+                Prepaid lessons (track lesson balance)
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="create-billing"
+                  checked={billingMode === 'monthly'}
+                  onChange={() => setBillingMode('monthly')}
+                />
+                Monthly flat fee
+              </label>
+            </div>
+            {billingMode === 'monthly' && (
+              <label className="mt-3 block">
+                <span className="text-xs text-slate-500">Typical monthly amount (optional)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={monthlyFee}
+                  onChange={(e) => setMonthlyFee(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            )}
+          </fieldset>
+
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:flex-1"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+              className="w-full rounded-lg bg-[#185560] px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#134851] sm:flex-1"
             >
               Create Class
             </button>

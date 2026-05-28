@@ -46,7 +46,7 @@ export default function SignupView({
               Create your account
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Start managing your classes with Hub LMS
+              Start with a clean workspace — no sample data
             </p>
           </div>
 

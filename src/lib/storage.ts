@@ -1,16 +1,28 @@
 import { buildInitialLedger } from '../data/attendance'
+import { migrateAssignment } from './assignments'
 import { INITIAL_ASSIGNMENTS } from '../data/assignments'
 import { INITIAL_CLASSES } from '../data/classes'
 import { INITIAL_STUDENTS } from '../data/students'
 import { codeToClassKey, nameToClassKey } from './classKeys'
+import {
+  generateUniqueClassJoinCode,
+  normalizeJoinCodeInput,
+} from './joinCodes'
 import { createDefaultWeeklySchedule, formatClassSchedule } from './classSchedule'
+import { logger } from './logger'
 import type {
+  AppDataBackup,
   Assignment,
   AttendanceLedger,
   AttendanceRow,
   AttendanceStatus,
   Class,
+  ClassBillingMode,
+  JoinRequest,
+  PaymentRecord,
+  SessionRole,
   Student,
+  StudentAccount,
   User,
 } from '../types'
 
@@ -21,6 +33,11 @@ export const STORAGE_KEYS = {
   attendance: 'hub-lms-attendance',
   user: 'hub-lms-user',
   session: 'hub-lms-session',
+  payments: 'hub-lms-payments',
+  sessionRole: 'hub-lms-session-role',
+  studentAccount: 'hub-lms-student-account',
+  joinRequests: 'hub-lms-join-requests',
+  studentAccounts: 'hub-lms-student-accounts',
 } as const
 
 export const DEV_BYPASS_USER: User = {
@@ -33,6 +50,7 @@ export const DEV_BYPASS_USER: User = {
 
 type LegacyStudent = Student & {
   className?: string
+  parentContact?: string
   tokensLeft?: number
   tokensTotal?: number
 }
@@ -78,6 +96,11 @@ function migrateClasses(raw: LegacyClass[]): Class[] {
         ? classFields.status
         : (seed?.status ?? 'active')
 
+    const billingMode: ClassBillingMode =
+      classFields.billingMode === 'monthly' || classFields.billingMode === 'prepaid'
+        ? classFields.billingMode
+        : (seed?.billingMode ?? 'prepaid')
+
     return {
       ...seed,
       ...classFields,
@@ -87,6 +110,8 @@ function migrateClasses(raw: LegacyClass[]): Class[] {
       students: studentIds.length,
       weeklySchedule,
       location,
+      billingMode,
+      monthlyFee: classFields.monthlyFee ?? seed?.monthlyFee,
       schedule:
         c.schedule ||
         formatClassSchedule(weeklySchedule, location) ||
@@ -96,14 +121,53 @@ function migrateClasses(raw: LegacyClass[]): Class[] {
   })
 }
 
+function normalizeClass(c: Class): Class {
+  return {
+    ...c,
+    billingMode: c.billingMode === 'monthly' ? 'monthly' : 'prepaid',
+    joinCode: c.joinCode ? normalizeJoinCodeInput(c.joinCode) : undefined,
+  }
+}
+
+export function ensureClassJoinCodes(classes: Class[]): Class[] {
+  const used = new Set<string>()
+  return classes.map((c) => {
+    let joinCode = c.joinCode ? normalizeJoinCodeInput(c.joinCode) : ''
+    if (!joinCode || used.has(joinCode)) {
+      joinCode = generateUniqueClassJoinCode(used)
+    }
+    used.add(joinCode)
+    return { ...c, joinCode }
+  })
+}
+
 export function loadClasses(): Class[] {
   const raw = readJson<LegacyClass[]>(STORAGE_KEYS.classes, INITIAL_CLASSES)
   const needsMigration = raw.some((c) => !c.classKey || !Array.isArray(c.studentIds))
-  return needsMigration ? migrateClasses(raw) : raw
+  const classes = needsMigration ? migrateClasses(raw) : raw
+  const normalized = classes.map(normalizeClass)
+  const withCodes = ensureClassJoinCodes(normalized)
+  const missingJoinCodes = normalized.some((c) => !c.joinCode)
+  if (needsMigration || missingJoinCodes) {
+    saveClasses(withCodes)
+  }
+  return withCodes
 }
 
-export function loadAssignments(): Assignment[] {
-  return readJson(STORAGE_KEYS.assignments, INITIAL_ASSIGNMENTS)
+export function loadAssignments(classes: Class[] = loadClasses()): Assignment[] {
+  const raw = readJson<Assignment[]>(STORAGE_KEYS.assignments, INITIAL_ASSIGNMENTS)
+  const migrated = raw.map((a) =>
+    migrateAssignment(a as Parameters<typeof migrateAssignment>[0], classes),
+  )
+  const needsPersist = raw.some(
+    (a, i) =>
+      !('classKey' in a && 'dueAt' in a) ||
+      migrated[i].id !== (a as Assignment).id,
+  )
+  if (needsPersist) {
+    saveAssignments(migrated)
+  }
+  return migrated
 }
 
 function classKeyFromLegacyName(className: string, classes: Class[]): string | null {
@@ -132,12 +196,23 @@ function migrateStudent(
     return {
       ...seed,
       ...s,
-      parentContact: s.parentContact ?? seed?.parentContact ?? '',
+      studentPhone:
+        s.studentPhone ??
+        (s as LegacyStudent).parentContact ??
+        seed?.studentPhone ??
+        seed?.parentPhone ??
+        '',
+      parentPhone:
+        s.parentPhone ??
+        (s as LegacyStudent).parentContact ??
+        seed?.parentPhone ??
+        '',
       grade: s.grade ?? seed?.grade ?? '',
       status,
       enrolledClasses: [...s.enrolledClasses],
       tokensByClass: { ...s.tokensByClass },
       tokenCapacityByClass: { ...(s.tokenCapacityByClass ?? {}) },
+      paidThroughMonthByClass: { ...(s.paidThroughMonthByClass ?? {}) },
     }
   }
 
@@ -177,7 +252,17 @@ function migrateStudent(
     id: s.id,
     name: s.name ?? seed?.name ?? '',
     email: s.email ?? seed?.email ?? '',
-    parentContact: s.parentContact ?? seed?.parentContact ?? '',
+    studentPhone:
+      s.studentPhone ??
+      (s as LegacyStudent).parentContact ??
+      seed?.studentPhone ??
+      seed?.parentPhone ??
+      '',
+    parentPhone:
+      s.parentPhone ??
+      (s as LegacyStudent).parentContact ??
+      seed?.parentPhone ??
+      '',
     grade: s.grade ?? seed?.grade ?? '',
     status,
     initials: s.initials ?? seed?.initials ?? '',
@@ -185,6 +270,7 @@ function migrateStudent(
     enrolledClasses,
     tokensByClass,
     tokenCapacityByClass,
+    paidThroughMonthByClass: { ...(s.paidThroughMonthByClass ?? seed?.paidThroughMonthByClass ?? {}) },
   }
 }
 
@@ -276,20 +362,78 @@ export function saveUser(user: User): void {
 
 export function saveDevBypassUser(): User {
   saveUser(DEV_BYPASS_USER)
-  saveSession()
+  saveTeacherSession()
   return DEV_BYPASS_USER
 }
 
+/** @deprecated Use loadSessionRole — kept for compatibility */
 export function loadSession(): boolean {
-  return localStorage.getItem(STORAGE_KEYS.session) === 'active'
+  return loadSessionRole() === 'teacher'
 }
 
-export function saveSession(): void {
+export function loadSessionRole(): SessionRole | null {
+  const role = localStorage.getItem(STORAGE_KEYS.sessionRole)
+  if (role === 'teacher' || role === 'student') return role
+  if (localStorage.getItem(STORAGE_KEYS.session) === 'active') return 'teacher'
+  return null
+}
+
+export function saveTeacherSession(): void {
   localStorage.setItem(STORAGE_KEYS.session, 'active')
+  localStorage.setItem(STORAGE_KEYS.sessionRole, 'teacher')
+}
+
+export function saveStudentSession(account: StudentAccount): void {
+  localStorage.setItem(STORAGE_KEYS.studentAccount, JSON.stringify(account))
+  localStorage.setItem(STORAGE_KEYS.sessionRole, 'student')
+  localStorage.removeItem(STORAGE_KEYS.session)
+}
+
+export function loadStudentAccount(): StudentAccount | null {
+  return readJson<StudentAccount | null>(STORAGE_KEYS.studentAccount, null)
+}
+
+export function saveStudentAccounts(accounts: StudentAccount[]): void {
+  localStorage.setItem(STORAGE_KEYS.studentAccounts, JSON.stringify(accounts))
+  if (loadSessionRole() === 'student') {
+    const session = loadStudentAccount()
+    if (session) {
+      const updated = accounts.find((a) => a.id === session.id)
+      if (updated) {
+        localStorage.setItem(STORAGE_KEYS.studentAccount, JSON.stringify(updated))
+      }
+    }
+  }
+}
+
+export function saveStudentAccountRecord(account: StudentAccount): void {
+  const all = loadStudentAccounts()
+  const next = all.some((a) => a.id === account.id)
+    ? all.map((a) => (a.id === account.id ? account : a))
+    : [...all, account]
+  saveStudentAccounts(next)
+}
+
+export function loadStudentAccounts(): StudentAccount[] {
+  return readJson<StudentAccount[]>(STORAGE_KEYS.studentAccounts, [])
+}
+
+export function loadJoinRequests(): JoinRequest[] {
+  return readJson<JoinRequest[]>(STORAGE_KEYS.joinRequests, [])
+}
+
+export function saveJoinRequests(requests: JoinRequest[]): void {
+  localStorage.setItem(STORAGE_KEYS.joinRequests, JSON.stringify(requests))
 }
 
 export function clearSession(): void {
   localStorage.removeItem(STORAGE_KEYS.session)
+  localStorage.removeItem(STORAGE_KEYS.sessionRole)
+  localStorage.removeItem(STORAGE_KEYS.studentAccount)
+}
+
+export function saveSession(): void {
+  saveTeacherSession()
 }
 
 export function getInitials(name: string): string {
@@ -300,4 +444,101 @@ export function getInitials(name: string): string {
     .join('')
     .slice(0, 2)
     .toUpperCase()
+}
+
+export function loadPayments(): PaymentRecord[] {
+  return readJson<PaymentRecord[]>(STORAGE_KEYS.payments, [])
+}
+
+export function savePayments(payments: PaymentRecord[]): void {
+  localStorage.setItem(STORAGE_KEYS.payments, JSON.stringify(payments))
+}
+
+export function buildAppBackup(
+  classes: Class[],
+  students: Student[],
+  attendance: AttendanceLedger,
+  payments: PaymentRecord[],
+  user: User | null,
+  joinRequests: JoinRequest[] = loadJoinRequests(),
+  studentAccounts: StudentAccount[] = loadStudentAccounts(),
+  assignments: Assignment[] = loadAssignments(classes),
+): AppDataBackup {
+  return {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    user,
+    classes,
+    students,
+    attendance,
+    payments,
+    joinRequests,
+    studentAccounts,
+    assignments,
+  }
+}
+
+export function parseAppBackup(raw: string): AppDataBackup {
+  const parsed = JSON.parse(raw) as AppDataBackup
+  if (parsed.version !== 1 && parsed.version !== 2) {
+    throw new Error('Unsupported backup version. Please export a new backup from this app.')
+  }
+  if (!Array.isArray(parsed.classes) || !Array.isArray(parsed.students)) {
+    throw new Error('Invalid backup file: missing classes or students.')
+  }
+  return parsed
+}
+
+export function persistAppBackup(backup: AppDataBackup): void {
+  saveClasses(ensureClassJoinCodes(backup.classes.map(normalizeClass)))
+  saveStudents(backup.students)
+  saveAttendance(backup.attendance)
+  savePayments(backup.payments ?? [])
+  saveJoinRequests(backup.joinRequests ?? [])
+  saveAssignments(
+    (backup.assignments ?? []).map((a) =>
+      migrateAssignment(a as Parameters<typeof migrateAssignment>[0], backup.classes),
+    ),
+  )
+  localStorage.setItem(
+    STORAGE_KEYS.studentAccounts,
+    JSON.stringify(backup.studentAccounts ?? []),
+  )
+  if (backup.user) {
+    saveUser(backup.user)
+  }
+  logger.info('App backup imported', { exportedAt: backup.exportedAt })
+}
+
+export function registerStudentAccount(
+  displayName: string,
+  email: string,
+): StudentAccount {
+  const accounts = loadStudentAccounts()
+  const existing = accounts.find(
+    (a) => a.email.toLowerCase() === email.trim().toLowerCase(),
+  )
+  if (existing) {
+    throw new Error('An account with this email already exists. Try signing in.')
+  }
+  const account: StudentAccount = {
+    id: accounts.reduce((max, a) => Math.max(max, a.id), 0) + 1,
+    email: email.trim().toLowerCase(),
+    displayName: displayName.trim(),
+    initials: getInitials(displayName),
+  }
+  saveStudentAccountRecord(account)
+  return account
+}
+
+export function findStudentAccountByEmail(email: string): StudentAccount | undefined {
+  const normalized = email.trim().toLowerCase()
+  return loadStudentAccounts().find((a) => a.email === normalized)
+}
+
+export function clearAllLocalData(): void {
+  for (const key of Object.values(STORAGE_KEYS)) {
+    localStorage.removeItem(key)
+  }
+  logger.info('All local app data cleared')
 }

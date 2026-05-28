@@ -1,28 +1,30 @@
-import { BookOpen, Users } from 'lucide-react'
+import { BookOpen, ChevronRight, Users } from 'lucide-react'
 import type { Class } from '../types'
 
 interface ClassCardProps {
   course: Class
-  onManage: (classId: number) => void
+  onOpen: (classId: number) => void
 }
 
-export default function ClassCard({ course, onManage }: ClassCardProps) {
+export default function ClassCard({ course, onOpen }: ClassCardProps) {
   return (
-    <article className="group flex min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-all hover:border-slate-300 hover:shadow-md">
-      <div className={`bg-gradient-to-r ${course.color} px-3 py-4`}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-base font-bold leading-tight text-white">
-              {course.name}
-            </h3>
-          </div>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/20 backdrop-blur-sm">
-            <BookOpen className="h-4 w-4 text-white" strokeWidth={2} />
+    <button
+      type="button"
+      onClick={() => onOpen(course.id)}
+      className="group flex min-w-0 w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition-all hover:border-[#185560]/25 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#185560]/30 active:scale-[0.99]"
+    >
+      <div className={`bg-gradient-to-r ${course.color} px-3 py-2.5 sm:py-3`}>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="min-w-0 flex-1 truncate text-base font-bold leading-tight text-white">
+            {course.name}
+          </h3>
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/20 backdrop-blur-sm sm:h-8 sm:w-8">
+            <BookOpen className="h-3.5 w-3.5 text-white sm:h-4 sm:w-4" strokeWidth={2} />
           </div>
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3">
+      <div className="space-y-1 p-2.5 sm:p-3">
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <Users className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
           <span className="truncate">
@@ -30,16 +32,18 @@ export default function ClassCard({ course, onManage }: ClassCardProps) {
               ? 'No students yet'
               : `${course.students} enrolled`}
           </span>
+          <ChevronRight
+            className="ml-auto h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-[#185560]"
+            strokeWidth={2}
+            aria-hidden
+          />
         </div>
-        <p className="line-clamp-2 text-xs leading-snug text-slate-600">{course.schedule}</p>
-        <button
-          type="button"
-          onClick={() => onManage(course.id)}
-          className="mt-auto w-full whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
-        >
-          Manage Class
-        </button>
+        {course.schedule ? (
+          <p className="line-clamp-2 text-left text-xs leading-snug text-slate-600">
+            {course.schedule}
+          </p>
+        ) : null}
       </div>
-    </article>
+    </button>
   )
 }

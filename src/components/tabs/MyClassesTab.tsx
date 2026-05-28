@@ -1,28 +1,55 @@
 import ClassCard from '../ClassCard'
+import EmptyState from '../ui/EmptyState'
+import { BookOpen, Plus } from 'lucide-react'
 import type { Class } from '../../types'
 
 interface MyClassesTabProps {
   classes: Class[]
-  onManageClass: (classId: number) => void
+  onOpenClass: (classId: number) => void
+  onCreateClass: () => void
 }
 
-export default function MyClassesTab({ classes, onManageClass }: MyClassesTabProps) {
+export default function MyClassesTab({
+  classes,
+  onOpenClass,
+  onCreateClass,
+}: MyClassesTabProps) {
   if (classes.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
-        <p className="text-lg font-medium text-slate-900">No classes yet</p>
-        <p className="mt-1 text-sm text-slate-500">
-          Click &quot;Create Class&quot; to add your first course.
-        </p>
-      </div>
+      <>
+        <EmptyState
+          icon={BookOpen}
+          title="No classes yet"
+          description="Create a class for each group you teach — for example “Tuesday Math” or “English 101”. You can add students and track attendance after that."
+          action={{ label: 'Create your first class', onClick: onCreateClass }}
+        />
+        <button
+          type="button"
+          onClick={onCreateClass}
+          className="fixed bottom-20 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#185560] text-white shadow-xl shadow-[#185560]/30 transition-transform hover:bg-[#134851] active:scale-95 md:hidden"
+          aria-label="Create class"
+        >
+          <Plus className="h-6 w-6" strokeWidth={2.5} />
+        </button>
+      </>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:[grid-template-columns:repeat(4,minmax(0,1fr))]">
-      {classes.map((course) => (
-        <ClassCard key={course.id} course={course} onManage={onManageClass} />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:[grid-template-columns:repeat(4,minmax(0,1fr))]">
+        {classes.map((course) => (
+          <ClassCard key={course.id} course={course} onOpen={onOpenClass} />
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={onCreateClass}
+        className="fixed bottom-20 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#185560] text-white shadow-xl shadow-[#185560]/30 transition-transform hover:bg-[#134851] active:scale-95 md:hidden"
+        aria-label="Create class"
+      >
+        <Plus className="h-6 w-6" strokeWidth={2.5} />
+      </button>
+    </>
   )
 }

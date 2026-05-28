@@ -53,7 +53,7 @@ export default function LoginView({
               Welcome back
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Sign in to your Hub LMS dashboard
+              Sign in to Teacher Hub
             </p>
           </div>
 

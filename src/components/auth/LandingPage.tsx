@@ -10,51 +10,53 @@ import {
 interface LandingPageProps {
   onSignIn: () => void
   onGetStarted: () => void
+  onStudentPortal: () => void
   onDevBypass: () => void
 }
 
 const FEATURES = [
   {
     icon: Layers,
-    title: 'Unified class hub',
+    title: 'Classes in one place',
     description:
-      'Organize every course, schedule, and resource in one calm, focused workspace.',
+      'Create each group you teach, set weekly times, and manage rosters without spreadsheets.',
   },
   {
     icon: Users,
-    title: 'Student-first roster',
+    title: 'Student roster & contacts',
     description:
-      'Searchable directories and at-a-glance profiles keep every learner within reach.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Actionable insights',
-    description:
-      'Track submissions, grading queues, and engagement without spreadsheet chaos.',
+      'Names, parent phones, and lesson balances—everything you need before each session.',
   },
   {
     icon: Calendar,
-    title: 'Daily clarity',
+    title: 'Attendance that sticks',
     description:
-      "See today's schedule and announcements the moment you sign in.",
+      'Mark present, absent, or excused. Prepaid lessons update automatically when you save.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Payment reminders',
+    description:
+      'See who is running low on lessons so you can follow up before the next class.',
   },
   {
     icon: Shield,
-    title: 'Secure by design',
+    title: 'Your data, your device',
     description:
-      'Built-in account controls and 2FA-ready settings protect your classroom data.',
+      'Works in the browser for now. Cloud sync and accounts come when you are ready to go live.',
   },
   {
     icon: GraduationCap,
-    title: 'Made for educators',
+    title: 'Built for tutors',
     description:
-      'Every screen is tuned for teachers—not generic admin panels.',
+      'Designed for individual teachers and small practices—not bloated school admin software.',
   },
 ]
 
 export default function LandingPage({
   onSignIn,
   onGetStarted,
+  onStudentPortal,
   onDevBypass,
 }: LandingPageProps) {
   return (
@@ -64,7 +66,7 @@ export default function LandingPage({
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-lg shadow-blue-600/30">
             <GraduationCap className="h-5 w-5 text-white" strokeWidth={2.25} />
           </div>
-          <span className="text-lg font-semibold tracking-tight">Hub LMS</span>
+          <span className="text-lg font-semibold tracking-tight">Teacher Hub</span>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -89,18 +91,17 @@ export default function LandingPage({
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(59,130,246,0.15),_transparent_50%)]" />
           <div className="relative mx-auto max-w-4xl text-center">
             <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-700/80 bg-slate-800/50 px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-blue-300">
-              Built for modern classrooms
+              CRM for tutors & teachers
             </p>
             <h1 className="text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Teach with clarity.
+              Run your classes
               <span className="mt-2 block bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">
-                Manage with confidence.
+                without the spreadsheet chaos.
               </span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-400">
-              Hub LMS is the premium productivity suite designed exclusively for
-              teachers—classes, assignments, students, and insights in one elegant
-              dashboard.
+              Teacher Hub helps you track students, attendance, and prepaid lessons in one
+              calm workspace—built for solo tutors first, with more coming later.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <button
@@ -120,13 +121,20 @@ export default function LandingPage({
             </div>
             <button
               type="button"
+              onClick={onStudentPortal}
+              className="mt-4 text-sm font-medium text-violet-300 underline-offset-4 hover:text-violet-200 hover:underline"
+            >
+              Student? Join your class →
+            </button>
+            <button
+              type="button"
               onClick={(e) => {
                 e.preventDefault()
                 onDevBypass()
               }}
               className="mt-6 rounded-xl border-2 border-dashed border-amber-400/60 bg-amber-500/10 px-6 py-2.5 text-sm font-semibold text-amber-200 transition-all hover:border-amber-400 hover:bg-amber-500/20"
             >
-              ⚡ Dev Bypass: Sign In as Prof. Smith
+              ⚡ Dev Bypass: try sample data
             </button>
           </div>
 
@@ -135,9 +143,9 @@ export default function LandingPage({
               <div className="rounded-xl bg-slate-50 p-6 sm:p-8">
                 <div className="grid gap-4 sm:grid-cols-3">
                   {[
-                    { label: 'Students', value: '248' },
-                    { label: 'Active Classes', value: '6' },
-                    { label: 'Pending Grading', value: '34' },
+                    { label: 'Students', value: '24' },
+                    { label: 'Active Classes', value: '3' },
+                    { label: 'Low lesson balance', value: '2' },
                   ].map((stat) => (
                     <div
                       key={stat.label}
@@ -159,11 +167,11 @@ export default function LandingPage({
           <div className="mx-auto max-w-6xl">
             <div className="text-center">
               <h2 className="text-3xl font-semibold tracking-tight text-white">
-                Why teachers choose Hub LMS
+                Why teachers choose Teacher Hub
               </h2>
               <p className="mx-auto mt-3 max-w-2xl text-slate-400">
-                Less busywork, more teaching. Every feature is crafted around the
-                rhythms of your school day.
+                Less busywork, more teaching. Homework and student logins are planned for a
+                later version—today is about running your practice.
               </p>
             </div>
             <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -191,10 +199,10 @@ export default function LandingPage({
         <section className="px-6 py-16 lg:px-8">
           <div className="mx-auto max-w-3xl rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-12 text-center shadow-xl">
             <h2 className="text-2xl font-semibold text-white sm:text-3xl">
-              Ready to transform your classroom workflow?
+              Ready to replace your classroom spreadsheets?
             </h2>
             <p className="mt-3 text-blue-100">
-              Join educators who run their day from one beautiful dashboard.
+              Create an account and set up your first class in minutes.
             </p>
             <button
               type="button"
@@ -208,7 +216,7 @@ export default function LandingPage({
       </main>
 
       <footer className="border-t border-slate-800 px-6 py-8 text-center text-sm text-slate-500 lg:px-8">
-        © {new Date().getFullYear()} Hub LMS. Built for teachers, by educators.
+        © {new Date().getFullYear()} Teacher Hub. Built for educators.
       </footer>
     </div>
   )

@@ -1,4 +1,13 @@
-import { ChevronDown, Plus } from 'lucide-react'
+import {
+  CalendarCheck,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  MinusCircle,
+  Plus,
+  XCircle,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AttendanceCellTransition } from '../../lib/attendanceTokens'
 import {
@@ -6,6 +15,8 @@ import {
   getTokenBalance,
   isClassCritical,
 } from '../../lib/studentTokens'
+import { isMonthlyClass } from '../../lib/billing'
+import EmptyState from '../ui/EmptyState'
 import type {
   AttendanceColumn,
   AttendanceLedger,
@@ -25,6 +36,7 @@ interface AttendanceTabProps {
     classKey: string,
     transitions: AttendanceCellTransition[],
   ) => void
+  onCreateClass: () => void
 }
 
 const STATUS_UI: Record<
@@ -37,12 +49,66 @@ const STATUS_UI: Record<
   unset: { dot: 'bg-slate-200 ring-slate-100', label: 'Unset' },
 }
 
+const MOBILE_STATUS_ACTIONS: {
+  status: Exclude<AttendanceStatus, 'unset'>
+  label: string
+  Icon: typeof CheckCircle2
+  activeClassName: string
+}[] = [
+  {
+    status: 'present',
+    label: 'Present',
+    Icon: CheckCircle2,
+    activeClassName: 'text-emerald-600',
+  },
+  {
+    status: 'absent',
+    label: 'Absent',
+    Icon: XCircle,
+    activeClassName: 'text-rose-600',
+  },
+  {
+    status: 'excused',
+    label: 'Excused',
+    Icon: MinusCircle,
+    activeClassName: 'text-amber-500',
+  },
+]
+
 function formatColumnLabel(dateKey: string): string {
   const d = new Date(dateKey + 'T12:00:00')
   const today = new Date().toISOString().slice(0, 10)
   const short = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   if (dateKey === today) return `Today (${short})`
   return short
+}
+
+/** Local calendar date as YYYY-MM-DD (not UTC midnight drift). */
+function localIsoDate(d = new Date()): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function parseIsoLocal(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function addDaysToIsoDate(iso: string, deltaDays: number): string {
+  const dt = parseIsoLocal(iso)
+  dt.setDate(dt.getDate() + deltaDays)
+  return localIsoDate(dt)
+}
+
+/** e.g. "Wednesday, May 20" — attendance cell identity is classKey + this dateKey in recordsByClass. */
+function formatLongWeekdayDate(iso: string): string {
+  return parseIsoLocal(iso).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
 }
 
 export default function AttendanceTab({
@@ -52,6 +118,7 @@ export default function AttendanceTab({
   activeClassKey,
   onActiveClassChange,
   onLedgerChange,
+  onCreateClass,
 }: AttendanceTabProps) {
   const [headerMenuId, setHeaderMenuId] = useState<string | null>(null)
   const [cellMenu, setCellMenu] = useState<{
@@ -63,6 +130,9 @@ export default function AttendanceTab({
   const [showAddDate, setShowAddDate] = useState(false)
   const [newDateValue, setNewDateValue] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  /** Mobile: which calendar day to show — persisted via recordsByClass[classKey][studentId][dateKey]. */
+  const [mobileDateKey, setMobileDateKey] = useState(localIsoDate)
+  const mobileDatePickerRef = useRef<HTMLInputElement>(null)
 
   const classRecords = ledger.recordsByClass[activeClassKey] ?? {}
 
@@ -74,6 +144,10 @@ export default function AttendanceTab({
       ),
     [students, activeClassKey],
   )
+
+  useEffect(() => {
+    setMobileDateKey(localIsoDate())
+  }, [activeClassKey])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -92,6 +166,7 @@ export default function AttendanceTab({
     nextRecords: Record<number, Record<string, AttendanceStatus>>,
     transitions: AttendanceCellTransition[],
   ) => {
+    // Logical cell: recordsByClass[classKey][studentId][dateKey] === `${classKey}_${dateKey}` per student.
     onLedgerChange(
       {
         ...ledger,
@@ -262,49 +337,55 @@ export default function AttendanceTab({
   }
 
   const activeClass = classes.find((c) => c.classKey === activeClassKey)
+  const showLessonTokens = activeClass ? !isMonthlyClass(activeClass) : true
+
+  if (classes.length === 0) {
+    return (
+      <EmptyState
+        icon={CalendarCheck}
+        title="No classes yet"
+        description="Attendance is tracked per class. Create a class, add students to the roster, then mark who attended each session."
+        action={{ label: 'Create a class', onClick: onCreateClass }}
+      />
+    )
+  }
 
   return (
     <div ref={containerRef} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-6 py-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="font-semibold text-slate-900">Infinite Attendance Ledger</h2>
-            <p className="text-sm text-slate-500">
-              Blackboard-style grid — tokens and attendance scoped per class
-            </p>
-          </div>
-          <label className="block sm:min-w-[220px]">
-            <span className="text-xs font-medium text-slate-500">Active Class</span>
-            <select
-              value={activeClassKey}
-              onChange={(e) => onActiveClassChange(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              {classes.map((c) => (
-                <option key={c.classKey} value={c.classKey}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+      <div className="border-b border-slate-100 px-4 py-3 md:px-6 md:py-4">
+        <label className="block max-w-xl">
+          <span className="text-xs font-medium text-[#185560]">Active Class</span>
+          <select
+            value={activeClassKey}
+            onChange={(e) => onActiveClassChange(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          >
+            {classes.map((c) => (
+              <option key={c.classKey} value={c.classKey}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
         {activeClass && (
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-400 md:mt-2">
             Showing {visibleStudents.length} enrolled students
           </p>
         )}
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-max min-w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="sticky left-0 z-20 min-w-[180px] border-r border-slate-200 bg-slate-50 px-4 py-3 text-left font-semibold text-slate-700">
                 Student Name
               </th>
-              <th className="sticky left-[180px] z-20 min-w-[120px] border-r border-slate-200 bg-slate-50 px-4 py-3 text-left font-semibold text-slate-700">
-                Tokens Left
-              </th>
+              {showLessonTokens && (
+                <th className="sticky left-[180px] z-20 min-w-[120px] border-r border-slate-200 bg-slate-50 px-4 py-3 text-left font-semibold text-slate-700">
+                  Lessons left
+                </th>
+              )}
               {ledger.columns.map((col) => (
                 <th
                   key={col.id}
@@ -411,22 +492,24 @@ export default function AttendanceTab({
                   <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-4 py-3 font-medium text-slate-900">
                     {student.name}
                   </td>
-                  <td className="sticky left-[180px] z-10 border-r border-slate-200 bg-white px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        overdrawn
-                          ? 'bg-rose-100 text-rose-800 ring-1 ring-rose-300'
-                          : critical
-                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                            : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                      }`}
-                      title={formatTokenLabel(student, activeClassKey)}
-                    >
-                      {overdrawn
-                        ? formatTokenLabel(student, activeClassKey)
-                        : tokensLeft}
-                    </span>
-                  </td>
+                  {showLessonTokens && (
+                    <td className="sticky left-[180px] z-10 border-r border-slate-200 bg-white px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          overdrawn
+                            ? 'bg-rose-100 text-rose-800 ring-1 ring-rose-300'
+                            : critical
+                              ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                              : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                        }`}
+                        title={formatTokenLabel(student, activeClassKey)}
+                      >
+                        {overdrawn
+                          ? formatTokenLabel(student, activeClassKey)
+                          : tokensLeft}
+                      </span>
+                    </td>
+                  )}
                   {ledger.columns.map((col) => {
                     const status = records[col.dateKey] ?? 'unset'
                     const ui = STATUS_UI[status]
@@ -494,7 +577,7 @@ export default function AttendanceTab({
             {visibleStudents.length === 0 && (
               <tr>
                 <td
-                  colSpan={ledger.columns.length + 3}
+                  colSpan={ledger.columns.length + (showLessonTokens ? 3 : 2)}
                   className="px-6 py-12 text-center text-slate-500"
                 >
                   No active students enrolled in this class.
@@ -503,6 +586,104 @@ export default function AttendanceTab({
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-3">
+          <button
+            type="button"
+            onClick={() => setMobileDateKey((d) => addDaysToIsoDate(d, -1))}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-[#185560] transition-colors hover:bg-[rgba(24,85,96,0.06)]"
+            aria-label="Previous day"
+          >
+            <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+          </button>
+          <div className="relative min-w-0 flex-1 text-center">
+            <label className="relative mx-auto block max-w-full cursor-pointer px-2 py-1">
+              <span className="pointer-events-none block truncate text-sm font-semibold text-[#185560]">
+                {formatLongWeekdayDate(mobileDateKey)}
+              </span>
+              <input
+                ref={mobileDatePickerRef}
+                type="date"
+                value={mobileDateKey}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v) setMobileDateKey(v)
+                }}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label="Choose date"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileDateKey((d) => addDaysToIsoDate(d, 1))}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-[#185560] transition-colors hover:bg-[rgba(24,85,96,0.06)]"
+            aria-label="Next day"
+          >
+            <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
+          </button>
+        </div>
+        {visibleStudents.length > 0 && (
+          <div className="border-b border-slate-100 px-4 py-2.5">
+            <button
+              type="button"
+              onClick={() => handleMarkAllPresent(mobileDateKey)}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 active:scale-[0.99]"
+            >
+              <CheckCircle2 className="h-4 w-4" strokeWidth={2.25} />
+              Mark all present
+            </button>
+          </div>
+        )}
+        <ul className="divide-y divide-slate-100">
+          {visibleStudents.map((student) => {
+            const row = { ...ensureStudentRecord(student.id), ...classRecords[student.id] }
+            const status = row[mobileDateKey] ?? 'unset'
+
+            return (
+              <li
+                key={student.id}
+                className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[rgba(24,85,96,0.04)]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">{student.name}</p>
+                </div>
+                <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
+                  {MOBILE_STATUS_ACTIONS.map(({ status: actionStatus, label, Icon, activeClassName }) => {
+                    const isActive = status === actionStatus
+                    const nextStatus: AttendanceStatus = isActive ? 'unset' : actionStatus
+                    return (
+                      <button
+                        key={actionStatus}
+                        type="button"
+                        onClick={() => setCellStatus(student.id, mobileDateKey, nextStatus)}
+                        className={`rounded-full p-1.5 transition-colors ${
+                          isActive ? 'bg-slate-100' : 'hover:bg-slate-50'
+                        }`}
+                        aria-label={`${label} for ${student.name}`}
+                        title={label}
+                      >
+                        <Icon
+                          className={`h-5 w-5 ${
+                            isActive ? activeClassName : 'text-slate-300'
+                          }`}
+                          strokeWidth={2.25}
+                        />
+                      </button>
+                    )
+                  })}
+                </div>
+              </li>
+            )
+          })}
+          {visibleStudents.length === 0 && (
+            <li className="px-4 py-8 text-center text-sm text-slate-500">
+              No active students enrolled in this class.
+            </li>
+          )}
+        </ul>
       </div>
     </div>
   )
