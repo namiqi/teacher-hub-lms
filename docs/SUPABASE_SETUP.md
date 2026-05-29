@@ -42,6 +42,8 @@ If part 1 succeeded but part 2 failed, only re-run the missing part(s).
 
 6. **`supabase/schema-6-assignment-submissions.sql`** — run to enable **assignment file submissions**, grading, and the `assignment-submissions` storage bucket.
 
+7. **`supabase/schema-7-submission-storage-read.sql`** — run if teachers cannot open student submission files (storage read policy fix).
+
 ## 3. Enable Google sign-in
 
 1. **Authentication → Providers → Google** — enable and add your Google OAuth client ID/secret.

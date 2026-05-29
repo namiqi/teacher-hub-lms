@@ -24,6 +24,18 @@ export function isPreviewableMime(mime: string): boolean {
   )
 }
 
+export function resolvePreviewMime(mimeType: string, fileName: string): string {
+  const trimmed = mimeType.trim()
+  if (trimmed && trimmed !== 'application/octet-stream' && isPreviewableMime(trimmed)) {
+    return trimmed
+  }
+  const lower = fileName.toLowerCase()
+  if (lower.endsWith('.pdf')) return 'application/pdf'
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  return trimmed || 'application/octet-stream'
+}
+
 /** Safe object key segment for Supabase Storage (ASCII only, no spaces). */
 export function sanitizeStorageObjectName(fileName: string): string {
   const trimmed = fileName.trim() || 'file'

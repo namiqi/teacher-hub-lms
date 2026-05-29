@@ -1,18 +1,28 @@
-import { Loader2, X } from 'lucide-react'
+import { Download, ExternalLink, Loader2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { isPreviewableMime } from '../../lib/submissions/constants'
 import {
   fetchSubmissionsForAssignment,
-  getSubmissionFileSignedUrl,
+  getSubmissionFileBlobUrl,
+  openSubmissionFileInNewTab,
   saveSubmissionReview,
 } from '../../lib/supabase/submissions'
+import SubmissionFilePreview from '../shared/SubmissionFilePreview'
 import type { Assignment, AssignmentSubmission, Student } from '../../types'
+
+type PreviewState = {
+  url: string
+  mimeType: string
+  fileName: string
+  storagePath: string
+}
 
 interface TeacherAssignmentSubmissionsPanelProps {
   assignment: Assignment
   students: Student[]
   teacherUserId: string
   onClose: () => void
+  onReviewed?: () => void
 }
 
 export default function TeacherAssignmentSubmissionsPanel({
@@ -20,6 +30,7 @@ export default function TeacherAssignmentSubmissionsPanel({
   students,
   teacherUserId,
   onClose,
+  onReviewed,
 }: TeacherAssignmentSubmissionsPanelProps) {
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,7 +39,8 @@ export default function TeacherAssignmentSubmissionsPanel({
   const [scoreInput, setScoreInput] = useState('')
   const [feedbackInput, setFeedbackInput] = useState('')
   const [saving, setSaving] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [preview, setPreview] = useState<PreviewState | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const enrolled = useMemo(
     () =>
@@ -71,19 +83,41 @@ export default function TeacherAssignmentSubmissionsPanel({
     if (!selected) {
       setScoreInput('')
       setFeedbackInput('')
+      setPreview(null)
       return
     }
     setScoreInput(selected.score != null ? String(selected.score) : '')
     setFeedbackInput(selected.feedback ?? '')
+    setPreview(null)
   }, [selected])
 
-  const openPreview = async (path: string, mime: string) => {
+  useEffect(() => {
+    return () => {
+      if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
+    }
+  }, [preview])
+
+  const openPreview = async (path: string, mime: string, fileName: string) => {
+    setPreviewLoading(true)
+    setError(null)
+    if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
+    setPreview(null)
     try {
-      const url = await getSubmissionFileSignedUrl(path)
-      if (isPreviewableMime(mime)) setPreviewUrl(url)
-      else window.open(url, '_blank', 'noopener,noreferrer')
+      if (isPreviewableMime(mime) || fileName.toLowerCase().endsWith('.pdf')) {
+        const blobUrl = await getSubmissionFileBlobUrl(path, mime, fileName)
+        setPreview({
+          url: blobUrl,
+          mimeType: mime,
+          fileName,
+          storagePath: path,
+        })
+      } else {
+        await openSubmissionFileInNewTab(path, fileName)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open file.')
+    } finally {
+      setPreviewLoading(false)
     }
   }
 
@@ -105,6 +139,7 @@ export default function TeacherAssignmentSubmissionsPanel({
       })
       await load()
       setSelectedId(selected.id)
+      onReviewed?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save grade.')
     } finally {
@@ -167,14 +202,22 @@ export default function TeacherAssignmentSubmissionsPanel({
                               : 'cursor-default text-slate-400'
                         }`}
                       >
-                        <span className="block truncate">{student.name}</span>
+                        <span className="flex items-center gap-2 truncate">
+                          <span className="truncate">{student.name}</span>
+                          {sub?.status === 'submitted' && (
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full bg-rose-500"
+                              aria-label="Needs review"
+                            />
+                          )}
+                        </span>
                         <span className="text-xs font-normal opacity-80">
                           {sub
                             ? sub.status === 'reviewed' && sub.score != null
                               ? `${sub.score}/${sub.maxPoints}`
                               : sub.isLate
                                 ? 'Submitted (late)'
-                                : 'Submitted'
+                                : 'Needs review'
                             : 'Not submitted'}
                         </span>
                       </button>
@@ -204,25 +247,74 @@ export default function TeacherAssignmentSubmissionsPanel({
                   )}
                 </div>
 
-                <ul className="space-y-1">
-                  {selected.files.map((f) => (
-                    <li key={f.id}>
-                      <button
-                        type="button"
-                        onClick={() => void openPreview(f.storagePath, f.mimeType)}
-                        className="text-sm font-medium text-[#185560] hover:underline"
+                {selected.files.length === 0 ? (
+                  <p className="text-sm text-amber-700">
+                    No files attached to this submission.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {selected.files.map((f) => (
+                      <li
+                        key={f.id}
+                        className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
                       >
-                        {f.fileName}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                          {f.fileName}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void openPreview(f.storagePath, f.mimeType, f.fileName)
+                          }
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#185560] hover:underline"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          {isPreviewableMime(f.mimeType) ? 'Preview' : 'Open'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void openSubmissionFileInNewTab(f.storagePath, f.fileName).catch(
+                              (err) =>
+                                setError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : 'Could not download file.',
+                                ),
+                            )
+                          }
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:underline"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Download
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-                {previewUrl && (
-                  <iframe
-                    title="Preview"
-                    src={previewUrl}
-                    className="h-64 w-full rounded-lg border border-slate-200"
+                {previewLoading && (
+                  <p className="flex items-center gap-2 text-sm text-slate-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading preview…
+                  </p>
+                )}
+
+                {preview && (
+                  <SubmissionFilePreview
+                    url={preview.url}
+                    mimeType={preview.mimeType}
+                    fileName={preview.fileName}
+                    onOpenInNewTab={() =>
+                      void openSubmissionFileInNewTab(
+                        preview.storagePath,
+                        preview.fileName,
+                      ).catch((err) =>
+                        setError(
+                          err instanceof Error ? err.message : 'Could not open file.',
+                        ),
+                      )
+                    }
                   />
                 )}
 

@@ -1,5 +1,6 @@
 import {
   mimeFromFile,
+  resolvePreviewMime,
   sanitizeStorageObjectName,
   SUBMISSION_BUCKET,
 } from '../submissions/constants'
@@ -168,15 +169,78 @@ export async function fetchSubmissionsForAssignment(
 export async function getSubmissionFileSignedUrl(
   storagePath: string,
   expiresIn = 3600,
+  downloadName?: string,
 ): Promise<string> {
   const { data, error } = await getSupabase()
     .storage.from(SUBMISSION_BUCKET)
-    .createSignedUrl(storagePath, expiresIn)
+    .createSignedUrl(storagePath, expiresIn, {
+      download: downloadName ?? false,
+    })
 
   if (error || !data?.signedUrl) {
-    throw new Error(error?.message ?? 'Could not load file preview.')
+    throw new Error(error?.message ?? 'Could not load file.')
   }
   return data.signedUrl
+}
+
+/** Blob URL for in-app preview. Caller should revoke when done. */
+export async function getSubmissionFileBlobUrl(
+  storagePath: string,
+  mimeType?: string,
+  fileName?: string,
+): Promise<string> {
+  const { data, error } = await getSupabase()
+    .storage.from(SUBMISSION_BUCKET)
+    .download(storagePath)
+
+  if (error || !data) {
+    throw new Error(error?.message ?? 'Could not download file.')
+  }
+
+  const resolvedMime = resolvePreviewMime(
+    mimeType ?? data.type ?? '',
+    fileName ?? storagePath,
+  )
+  if (
+    data.type &&
+    data.type !== 'application/octet-stream' &&
+    data.type === resolvedMime
+  ) {
+    return URL.createObjectURL(data)
+  }
+  const buffer = await data.arrayBuffer()
+  return URL.createObjectURL(new Blob([buffer], { type: resolvedMime }))
+}
+
+export async function fetchUnreviewedCountsByAssignment(
+  teacherUserId: string,
+  assignmentIds: string[],
+): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {}
+  if (assignmentIds.length === 0) return counts
+
+  const { data, error } = await getSupabase()
+    .from('assignment_submissions')
+    .select('assignment_id')
+    .eq('teacher_id', teacherUserId)
+    .eq('status', 'submitted')
+    .in('assignment_id', assignmentIds)
+
+  if (error) throw new Error(error.message)
+
+  for (const row of data ?? []) {
+    const id = row.assignment_id as string
+    counts[id] = (counts[id] ?? 0) + 1
+  }
+  return counts
+}
+
+export async function openSubmissionFileInNewTab(
+  storagePath: string,
+  fileName: string,
+): Promise<void> {
+  const url = await getSubmissionFileSignedUrl(storagePath, 3600, fileName)
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 export async function submitAssignmentWork(params: {

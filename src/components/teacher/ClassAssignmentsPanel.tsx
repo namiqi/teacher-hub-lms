@@ -6,7 +6,8 @@ import {
   Pencil,
   Plus,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { fetchUnreviewedCountsByAssignment } from '../../lib/supabase/submissions'
 import {
   assignmentStatusLabel,
   assignmentStatusStyles,
@@ -121,9 +122,34 @@ export default function ClassAssignmentsPanel({
   const [announcementFormOpen, setAnnouncementFormOpen] = useState(false)
   const [editing, setEditing] = useState<Assignment | null>(null)
   const [submissionsFor, setSubmissionsFor] = useState<Assignment | null>(null)
+  const [unreviewedCounts, setUnreviewedCounts] = useState<Record<string, number>>(
+    {},
+  )
   const createMenuRef = useRef<HTMLDivElement>(null)
 
   const classPosts = postsForClass(assignments, cls.classKey)
+
+  const gradableAssignmentIds = useMemo(
+    () =>
+      classPosts
+        .filter((p) => !isAnnouncement(p) && p.status !== 'draft')
+        .map((p) => p.id),
+    [classPosts],
+  )
+
+  const refreshUnreviewedCounts = useCallback(() => {
+    if (!teacherUserId || gradableAssignmentIds.length === 0) {
+      setUnreviewedCounts({})
+      return
+    }
+    void fetchUnreviewedCountsByAssignment(teacherUserId, gradableAssignmentIds)
+      .then(setUnreviewedCounts)
+      .catch(() => setUnreviewedCounts({}))
+  }, [teacherUserId, gradableAssignmentIds])
+
+  useEffect(() => {
+    refreshUnreviewedCounts()
+  }, [refreshUnreviewedCounts])
 
   useEffect(() => {
     if (!createMenuOpen) return
@@ -250,10 +276,17 @@ export default function ClassAssignmentsPanel({
                         <button
                           type="button"
                           onClick={() => setSubmissionsFor(post)}
-                          className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          className="relative inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                         >
                           <Inbox className="h-3.5 w-3.5" />
                           <span className="hidden sm:inline">Submissions</span>
+                          {(unreviewedCounts[post.id] ?? 0) > 0 && (
+                            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                              {unreviewedCounts[post.id] > 9
+                                ? '9+'
+                                : unreviewedCounts[post.id]}
+                            </span>
+                          )}
                         </button>
                       )}
                     <button
@@ -313,7 +346,11 @@ export default function ClassAssignmentsPanel({
           assignment={submissionsFor}
           students={students}
           teacherUserId={teacherUserId}
-          onClose={() => setSubmissionsFor(null)}
+          onClose={() => {
+            setSubmissionsFor(null)
+            refreshUnreviewedCounts()
+          }}
+          onReviewed={refreshUnreviewedCounts}
         />
       )}
     </>

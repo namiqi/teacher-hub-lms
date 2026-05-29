@@ -3,7 +3,8 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import {
   fetchMySubmission,
-  getSubmissionFileSignedUrl,
+  getSubmissionFileBlobUrl,
+  openSubmissionFileInNewTab,
   submitAssignmentWork,
 } from '../../lib/supabase/submissions'
 import {
@@ -22,7 +23,15 @@ import {
   attemptsRemaining,
   canSubmitAssignment,
 } from '../../lib/submissions/rules'
+import SubmissionFilePreview from '../shared/SubmissionFilePreview'
 import type { Assignment, AssignmentSubmission } from '../../types'
+
+type PreviewState = {
+  url: string
+  mimeType: string
+  fileName: string
+  storagePath: string
+}
 
 interface StudentAssignmentSubmitSectionProps {
   assignment: Assignment
@@ -51,8 +60,7 @@ export default function StudentAssignmentSubmitSection({
     getDraftFiles(assignment.id),
   )
   const [error, setError] = useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [previewLabel, setPreviewLabel] = useState<string | null>(null)
+  const [preview, setPreview] = useState<PreviewState | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
@@ -71,6 +79,12 @@ export default function StudentAssignmentSubmitSection({
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    return () => {
+      if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
+    }
+  }, [preview])
 
   if (!isSupabaseConfigured()) {
     return (
@@ -120,12 +134,12 @@ export default function StudentAssignmentSubmitSection({
 
   const openFile = async (storagePath: string, fileName: string, mime: string) => {
     try {
-      const url = await getSubmissionFileSignedUrl(storagePath)
-      if (isPreviewableMime(mime)) {
-        setPreviewUrl(url)
-        setPreviewLabel(fileName)
+      if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
+      if (isPreviewableMime(mime) || fileName.toLowerCase().endsWith('.pdf')) {
+        const blobUrl = await getSubmissionFileBlobUrl(storagePath, mime, fileName)
+        setPreview({ url: blobUrl, mimeType: mime, fileName, storagePath })
       } else {
-        window.open(url, '_blank', 'noopener,noreferrer')
+        await openSubmissionFileInNewTab(storagePath, fileName)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open file.')
@@ -205,25 +219,28 @@ export default function StudentAssignmentSubmitSection({
         </div>
       )}
 
-      {previewUrl && (
-        <div className="overflow-hidden rounded-lg border border-slate-200">
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
-            {previewLabel}
+      {preview && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-700">
+            <span className="truncate">{preview.fileName}</span>
             <button
               type="button"
-              className="text-violet-700 hover:underline"
+              className="shrink-0 text-violet-700 hover:underline"
               onClick={() => {
-                setPreviewUrl(null)
-                setPreviewLabel(null)
+                if (preview.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
+                setPreview(null)
               }}
             >
               Close preview
             </button>
           </div>
-          <iframe
-            title={previewLabel ?? 'Preview'}
-            src={previewUrl}
-            className="h-72 w-full bg-white sm:h-96"
+          <SubmissionFilePreview
+            url={preview.url}
+            mimeType={preview.mimeType}
+            fileName={preview.fileName}
+            onOpenInNewTab={() =>
+              void openSubmissionFileInNewTab(preview.storagePath, preview.fileName)
+            }
           />
         </div>
       )}
