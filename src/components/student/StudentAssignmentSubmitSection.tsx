@@ -1,5 +1,5 @@
 import { Download, FileText, Loader2, Upload } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import {
   fetchMySubmission,
@@ -11,6 +11,13 @@ import {
   isPreviewableMime,
   validateSubmissionFiles,
 } from '../../lib/submissions/constants'
+import {
+  clearSubmissionDraft,
+  getDraftFiles,
+  getDraftNote,
+  setDraftFiles,
+  setDraftNote,
+} from '../../lib/submissions/drafts'
 import {
   attemptsRemaining,
   canSubmitAssignment,
@@ -32,22 +39,28 @@ export default function StudentAssignmentSubmitSection({
   studentUserId,
   studentId,
 }: StudentAssignmentSubmitSectionProps) {
+  const fileInputId = useId()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [submission, setSubmission] = useState<AssignmentSubmission | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [note, setNote] = useState('')
-  const [files, setFiles] = useState<File[]>([])
+  const [note, setNote] = useState(
+    () => getDraftNote(assignment.id) ?? '',
+  )
+  const [files, setFiles] = useState<File[]>(() =>
+    getDraftFiles(assignment.id),
+  )
   const [error, setError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewLabel, setPreviewLabel] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
       const row = await fetchMySubmission(assignment.id, studentUserId)
       setSubmission(row)
-      setNote(row?.note ?? '')
+      const draftNote = getDraftNote(assignment.id)
+      setNote(draftNote ?? row?.note ?? '')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load submission.')
     } finally {
@@ -96,6 +109,8 @@ export default function StudentAssignmentSubmitSection({
       })
       setSubmission(saved)
       setFiles([])
+      clearSubmissionDraft(assignment.id)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submit failed.')
     } finally {
@@ -215,28 +230,44 @@ export default function StudentAssignmentSubmitSection({
 
       {gate.ok ? (
         <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-          <label className="block">
-            <span className="text-xs font-medium text-slate-700">
+          <div className="block">
+            <label
+              htmlFor={`note-${assignment.id}`}
+              className="text-xs font-medium text-slate-700"
+            >
               Note to teacher (optional)
-            </span>
+            </label>
             <textarea
+              id={`note-${assignment.id}`}
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(e) => {
+                setNote(e.target.value)
+                setDraftNote(assignment.id, e.target.value)
+              }}
               rows={2}
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
               placeholder="Anything your teacher should know…"
             />
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="text-xs font-medium text-slate-700">
+          <div className="block">
+            <label
+              htmlFor={fileInputId}
+              className="text-xs font-medium text-slate-700"
+            >
               Files {submission ? '(replaces previous files)' : ''}
-            </span>
+            </label>
             <input
+              ref={fileInputRef}
+              id={fileInputId}
               type="file"
               multiple
               accept={ALLOWED_SUBMISSION_EXTENSIONS}
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              onChange={(e) => {
+                const picked = Array.from(e.target.files ?? [])
+                setFiles(picked)
+                setDraftFiles(assignment.id, picked)
+              }}
               className="mt-1 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-violet-800"
             />
             <p className="mt-1 text-[11px] text-slate-400">
@@ -249,7 +280,7 @@ export default function StudentAssignmentSubmitSection({
                 ))}
               </ul>
             )}
-          </label>
+          </div>
 
           <button
             type="button"

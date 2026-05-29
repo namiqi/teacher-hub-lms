@@ -314,12 +314,17 @@ function App() {
 
     void init()
 
-    const unsub = onAuthStateChange((session) => {
+    const unsub = onAuthStateChange((session, event) => {
       if (!session?.user) {
-        setTeacherUserId(null)
-        setStudentUserId(null)
+        if (event === 'SIGNED_OUT') {
+          setTeacherUserId(null)
+          setStudentUserId(null)
+        }
         return
       }
+      // Token refresh runs when the window regains focus (e.g. after the file picker).
+      // Re-routing the whole app here kicked students back to the home screen.
+      if (event === 'TOKEN_REFRESHED') return
       void routeSession().catch((err) => {
         console.error('[Teacher Hub] Auth state sync failed', err)
       })
@@ -407,8 +412,9 @@ function App() {
     if (currentView !== 'dashboard' && currentView !== 'student-portal') return
     const onSync = () => {
       void refreshJoinRequests()
-      refreshAssignments()
-      if (currentView === 'student-portal') void refreshStudentPortal()
+      if (currentView === 'dashboard') refreshAssignments()
+      // Do not refresh the student portal on focus — closing the file picker
+      // triggers focus and was resetting class/assignment navigation.
     }
     const onVisible = () => {
       if (document.visibilityState === 'visible') onSync()

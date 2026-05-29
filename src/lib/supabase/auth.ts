@@ -1,4 +1,8 @@
-import type { Session, User as SupabaseUser } from '@supabase/supabase-js'
+import type {
+  AuthChangeEvent,
+  Session,
+  User as SupabaseUser,
+} from '@supabase/supabase-js'
 import type { SessionRole, User } from '../../types'
 import { getInitials } from '../storage'
 import { getSupabase, isSupabaseConfigured } from './client'
@@ -125,12 +129,14 @@ export async function signOutSupabase(): Promise<void> {
   await getSupabase().auth.signOut()
 }
 
+export type { AuthChangeEvent }
+
 export function onAuthStateChange(
-  callback: (session: Session | null) => void,
+  callback: (session: Session | null, event: AuthChangeEvent) => void,
 ): () => void {
   if (!isSupabaseConfigured()) return () => {}
-  const { data } = getSupabase().auth.onAuthStateChange((_event, session) => {
-    callback(session)
+  const { data } = getSupabase().auth.onAuthStateChange((event, session) => {
+    callback(session, event)
   })
   return () => data.subscription.unsubscribe()
 }

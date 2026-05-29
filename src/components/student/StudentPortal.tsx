@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import JoinClassModal from './JoinClassModal'
 import StudentAssignmentDetail from './StudentAssignmentDetail'
 import StudentClassDetail from './StudentClassDetail'
@@ -20,6 +20,28 @@ import type {
   StudentTabId,
 } from '../../types'
 import { STUDENT_HEADER_TITLES } from '../../types'
+
+const STUDENT_NAV_STORAGE_KEY = 'teacherhub-student-nav'
+
+function readStoredNav(): {
+  classKey: string | null
+  assignmentId: string | null
+} {
+  try {
+    const raw = sessionStorage.getItem(STUDENT_NAV_STORAGE_KEY)
+    if (!raw) return { classKey: null, assignmentId: null }
+    const parsed = JSON.parse(raw) as {
+      classKey?: string | null
+      assignmentId?: string | null
+    }
+    return {
+      classKey: parsed.classKey ?? null,
+      assignmentId: parsed.assignmentId ?? null,
+    }
+  } catch {
+    return { classKey: null, assignmentId: null }
+  }
+}
 
 interface StudentPortalProps {
   account: StudentAccount
@@ -52,11 +74,23 @@ export default function StudentPortal({
   onSubmitJoinRequest,
 }: StudentPortalProps) {
   const [activeTab, setActiveTab] = useState<StudentTabId>('home')
-  const [selectedClassKey, setSelectedClassKey] = useState<string | null>(null)
+  const [selectedClassKey, setSelectedClassKey] = useState<string | null>(
+    () => readStoredNav().classKey,
+  )
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(
-    null,
+    () => readStoredNav().assignmentId,
   )
   const [joinOpen, setJoinOpen] = useState(false)
+
+  useEffect(() => {
+    sessionStorage.setItem(
+      STUDENT_NAV_STORAGE_KEY,
+      JSON.stringify({
+        classKey: selectedClassKey,
+        assignmentId: selectedAssignmentId,
+      }),
+    )
+  }, [selectedClassKey, selectedAssignmentId])
 
   const linkedStudent = useMemo(
     () =>
@@ -108,10 +142,16 @@ export default function StudentPortal({
     [selectedAssignmentId, assignments],
   )
 
+  const navClassKey =
+    selectedClass?.classKey ??
+    selectedAssignment?.classKey ??
+    selectedClassKey ??
+    null
+
   const selectedEnrollment = useMemo(() => {
-    if (!selectedClass) return undefined
-    return classEnrollments.find((e) => e.classKey === selectedClass.classKey)
-  }, [selectedClass, classEnrollments])
+    if (!navClassKey) return undefined
+    return classEnrollments.find((e) => e.classKey === navClassKey)
+  }, [navClassKey, classEnrollments])
 
   const openClass = (classKey: string) => {
     setSelectedClassKey(classKey)
@@ -178,11 +218,16 @@ export default function StudentPortal({
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-8 md:pb-8">
-          {selectedAssignment && selectedClass ? (
+          {selectedAssignment ? (
             <StudentAssignmentDetail
               assignment={selectedAssignment}
-              className={selectedClass.name}
-              classKey={selectedClass.classKey}
+              className={
+                selectedClass?.name ??
+                classes.find((c) => c.classKey === selectedAssignment.classKey)
+                  ?.name ??
+                'Class'
+              }
+              classKey={selectedAssignment.classKey}
               teacherId={selectedEnrollment?.teacherId}
               studentUserId={studentUserId}
               studentId={selectedEnrollment?.studentId}
