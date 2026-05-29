@@ -35,11 +35,14 @@ import TeacherClassWorkspace from './components/teacher/TeacherClassWorkspace'
 import {
   buildAnnouncementFromInput,
   buildAssignmentFromInput,
+  isAnnouncement,
 } from './lib/assignments'
+import { buildActionInboxItems } from './lib/actionInbox'
 import OverviewTab from './components/tabs/OverviewTab'
 import SettingsTab from './components/tabs/SettingsTab'
 import StudentsTab from './components/tabs/StudentsTab'
 import TeacherAssignmentsTab from './components/tabs/TeacherAssignmentsTab'
+import type { TeacherNotificationItem } from './components/TeacherNotificationsMenu'
 import { CLASS_GRADIENTS } from './data/classes'
 import { STUDENT_AVATAR_COLORS } from './data/students'
 import { NEW_STUDENT_TOKEN_CAPACITY } from './lib/classKeys'
@@ -77,7 +80,9 @@ import {
   saveTeacherSession,
   saveUser,
 } from './lib/storage'
+import { classNameForKey } from './lib/studentTokens'
 import { studentEmailFromName } from './lib/utils'
+import { fetchTotalUnreviewedCount } from './lib/supabase/submissions'
 import { initializeEmptyWorkspace, seedDemoWorkspace } from './lib/workspace'
 import type { User as SupabaseAuthUser } from '@supabase/supabase-js'
 import { routeAuthenticatedUser } from './lib/supabase/appAuth'
@@ -177,6 +182,12 @@ function App() {
     loadAssignments(loadClasses()),
   )
   const [classEnrollments, setClassEnrollments] = useState<ClassEnrollment[]>([])
+  const [submissionNotifyVersion, setSubmissionNotifyVersion] = useState(0)
+  const [unreviewedSubmissionCount, setUnreviewedSubmissionCount] = useState(0)
+
+  const refreshSubmissionNotifications = useCallback(() => {
+    setSubmissionNotifyVersion((v) => v + 1)
+  }, [])
 
   const pendingJoinCount = useMemo(
     () => pendingRequestsForTeacher(joinRequests, classes).length,
@@ -187,6 +198,76 @@ function App() {
     () => classes.filter((c) => c.status !== 'archived'),
     [classes],
   )
+
+  useEffect(() => {
+    if (!teacherUserId || !useCloud) {
+      setUnreviewedSubmissionCount(0)
+      return
+    }
+    const activeKeys = new Set(activeClasses.map((c) => c.classKey))
+    const ids = assignments
+      .filter(
+        (a) =>
+          !isAnnouncement(a) &&
+          a.status !== 'draft' &&
+          activeKeys.has(a.classKey),
+      )
+      .map((a) => a.id)
+    void fetchTotalUnreviewedCount(teacherUserId, ids)
+      .then(setUnreviewedSubmissionCount)
+      .catch(() => setUnreviewedSubmissionCount(0))
+  }, [
+    teacherUserId,
+    assignments,
+    activeClasses,
+    submissionNotifyVersion,
+    useCloud,
+  ])
+
+  const teacherNotifications = useMemo((): TeacherNotificationItem[] => {
+    const items: TeacherNotificationItem[] = []
+
+    for (const request of pendingRequestsForTeacher(joinRequests, classes)) {
+      items.push({
+        id: `join-${request.id}`,
+        kind: 'join_request',
+        title: request.requestedName,
+        subtitle: `${classNameForKey(classes, request.classKey)} · approve join`,
+        onSelect: () => setActiveTab('students'),
+      })
+    }
+
+    if (unreviewedSubmissionCount > 0) {
+      items.push({
+        id: 'submissions',
+        kind: 'submission',
+        title: `${unreviewedSubmissionCount} submission${unreviewedSubmissionCount === 1 ? '' : 's'} to grade`,
+        subtitle: 'Open Assignments to review student work',
+        onSelect: () => setActiveTab('assignments'),
+      })
+    }
+
+    for (const action of buildActionInboxItems(students, classes, payments).slice(
+      0,
+      4,
+    )) {
+      items.push({
+        id: action.id,
+        kind: 'billing',
+        title: action.title,
+        subtitle: action.subtitle,
+        onSelect: () => setActiveTab('overview'),
+      })
+    }
+
+    return items
+  }, [
+    joinRequests,
+    classes,
+    unreviewedSubmissionCount,
+    students,
+    payments,
+  ])
 
   const shouldPersistClasses = useRef(false)
   const shouldPersistStudents = useRef(false)
@@ -1427,10 +1508,13 @@ function App() {
           <TeacherAssignmentsTab
             assignments={assignments}
             classes={activeClasses}
+            students={students}
+            teacherUserId={teacherUserId}
             onSaveAssignment={handleSaveAssignment}
             onSaveAnnouncement={handleSaveAnnouncement}
             onDeleteAssignment={handleDeleteAssignment}
             onGoToClasses={() => setActiveTab('classes')}
+            onSubmissionsReviewed={refreshSubmissionNotifications}
           />
         )
       case 'classes': {
@@ -1449,6 +1533,7 @@ function App() {
               onSaveAssignment={handleSaveAssignment}
               onSaveAnnouncement={handleSaveAnnouncement}
               onDeleteAssignment={handleDeleteAssignment}
+              onSubmissionsReviewed={refreshSubmissionNotifications}
             />
           )
         }
@@ -1536,6 +1621,7 @@ function App() {
       <MobileTopBar
         user={user}
         activeTab={activeTab}
+        notifications={teacherNotifications}
         onOpenProfile={() => setActiveTab('settings')}
         onSignOut={handleSignOut}
       />
@@ -1544,6 +1630,7 @@ function App() {
         <Header
           activeTab={activeTab}
           onCreateClass={() => setIsModalOpen(true)}
+          notifications={teacherNotifications}
         />
         <main className="flex-1 overflow-y-auto p-4 pb-16 md:p-8 md:pb-0">
           {renderTab()}

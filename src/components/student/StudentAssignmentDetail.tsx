@@ -7,6 +7,7 @@ import {
   postKindStyles,
 } from '../../lib/assignments'
 import StudentAssignmentSubmitSection from './StudentAssignmentSubmitSection'
+import PostAttachmentLink from '../ui/PostAttachmentLink'
 import type { Assignment } from '../../types'
 
 interface StudentAssignmentDetailProps {
@@ -90,6 +91,10 @@ export default function StudentAssignmentDetail({
                 <ExternalLink className="h-4 w-4" />
               </a>
             </div>
+          )}
+
+          {assignment.attachment && (
+            <PostAttachmentLink attachment={assignment.attachment} />
           )}
 
           {!announcement &&

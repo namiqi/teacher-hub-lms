@@ -28,6 +28,7 @@ interface TeacherClassWorkspaceProps {
     existingId?: string,
   ) => void
   onDeleteAssignment: (assignmentId: string) => void
+  onSubmissionsReviewed?: () => void
 }
 
 export default function TeacherClassWorkspace({
@@ -40,6 +41,7 @@ export default function TeacherClassWorkspace({
   onSaveAssignment,
   onSaveAnnouncement,
   onDeleteAssignment,
+  onSubmissionsReviewed,
 }: TeacherClassWorkspaceProps) {
   const enrolled = students.filter(
     (s) => s.status === 'active' && s.enrolledClasses.includes(cls.classKey),
@@ -92,6 +94,7 @@ export default function TeacherClassWorkspace({
         onSaveAssignment={onSaveAssignment}
         onSaveAnnouncement={onSaveAnnouncement}
         onDeleteAssignment={onDeleteAssignment}
+        onSubmissionsReviewed={onSubmissionsReviewed}
       />
     </div>
   )

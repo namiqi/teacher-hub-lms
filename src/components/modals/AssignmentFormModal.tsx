@@ -1,14 +1,19 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
+  createAssignmentId,
   formatDueForInput,
   parseDueFromInput,
 } from '../../lib/assignments'
+import { resolvePostAttachmentForSave } from '../../lib/supabase/postAttachments'
+import PostAttachmentField from '../ui/PostAttachmentField'
 import type { Assignment, AssignmentFormInput } from '../../types'
 
 interface AssignmentFormModalProps {
   isOpen: boolean
   className: string
+  classKey: string
+  teacherUserId?: string | null
   assignment?: Assignment | null
   onClose: () => void
   onSaveDraft: (input: AssignmentFormInput) => void
@@ -19,6 +24,8 @@ interface AssignmentFormModalProps {
 export default function AssignmentFormModal({
   isOpen,
   className,
+  classKey,
+  teacherUserId,
   assignment,
   onClose,
   onSaveDraft,
@@ -32,11 +39,19 @@ export default function AssignmentFormModal({
   const [maxPoints, setMaxPoints] = useState(10)
   const [allowLateSubmissions, setAllowLateSubmissions] = useState(false)
   const [maxResubmissions, setMaxResubmissions] = useState(0)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [removeAttachment, setRemoveAttachment] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const isEdit = Boolean(assignment)
 
   useEffect(() => {
     if (!isOpen) return
+    setPendingFile(null)
+    setRemoveAttachment(false)
+    setSaveError(null)
+    setSaving(false)
     if (assignment) {
       setTitle(assignment.title)
       setDescription(assignment.description)
@@ -65,7 +80,7 @@ export default function AssignmentFormModal({
 
   if (!isOpen) return null
 
-  const buildInput = (): AssignmentFormInput | null => {
+  const buildBaseInput = (): Omit<AssignmentFormInput, 'attachment' | 'id'> | null => {
     const trimmed = title.trim()
     if (!trimmed) return null
     return {
@@ -79,18 +94,49 @@ export default function AssignmentFormModal({
     }
   }
 
-  const handleDraft = () => {
-    const input = buildInput()
-    if (!input) return
-    onSaveDraft(input)
-    onClose()
+  const finalizeInput = async (): Promise<AssignmentFormInput | null> => {
+    const base = buildBaseInput()
+    if (!base) return null
+    const postId = assignment?.id ?? createAssignmentId()
+    const attachment = await resolvePostAttachmentForSave({
+      teacherUserId,
+      classKey,
+      postId,
+      existing: assignment?.attachment,
+      pendingFile,
+      removeExisting: removeAttachment,
+    })
+    return { ...base, id: postId, attachment }
   }
 
-  const handlePublish = () => {
-    const input = buildInput()
-    if (!input) return
-    onPublish(input)
-    onClose()
+  const handleDraft = async () => {
+    setSaveError(null)
+    setSaving(true)
+    try {
+      const input = await finalizeInput()
+      if (!input) return
+      onSaveDraft(input)
+      onClose()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePublish = async () => {
+    setSaveError(null)
+    setSaving(true)
+    try {
+      const input = await finalizeInput()
+      if (!input) return
+      onPublish(input)
+      onClose()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -197,6 +243,16 @@ export default function AssignmentFormModal({
             <span className="text-sm text-slate-700">Allow late submissions</span>
           </label>
 
+          <PostAttachmentField
+            existing={assignment?.attachment}
+            pendingFile={pendingFile}
+            onPendingFileChange={setPendingFile}
+            removeExisting={removeAttachment}
+            onRemoveExistingChange={setRemoveAttachment}
+            disabled={saving}
+            cloudRequired={Boolean(pendingFile) && !teacherUserId}
+          />
+
           <label className="block">
             <span className="text-sm font-medium text-slate-700">
               Resource link (optional)
@@ -212,6 +268,12 @@ export default function AssignmentFormModal({
               Paste a link to a worksheet or shared folder for students.
             </p>
           </label>
+
+          {saveError && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {saveError}
+            </p>
+          )}
         </form>
 
         <div className="flex flex-col gap-2 border-t border-slate-100 px-5 py-4">
@@ -230,31 +292,36 @@ export default function AssignmentFormModal({
             </button>
           )}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleDraft}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Save draft
-          </button>
-          <button
-            type="button"
-            onClick={handlePublish}
-            className="rounded-lg bg-[#185560] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#134851]"
-          >
-            {assignment?.status === 'published'
-              ? 'Save & keep published'
-              : assignment?.status === 'closed'
-                ? 'Publish again'
-                : 'Publish'}
-          </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDraft()}
+              disabled={saving}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save draft'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handlePublish()}
+              disabled={saving}
+              className="rounded-lg bg-[#185560] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#134851] disabled:opacity-50"
+            >
+              {saving
+                ? 'Saving…'
+                : assignment?.status === 'published'
+                  ? 'Save & keep published'
+                  : assignment?.status === 'closed'
+                    ? 'Publish again'
+                    : 'Publish'}
+            </button>
           </div>
         </div>
       </div>

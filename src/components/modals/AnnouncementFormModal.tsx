@@ -1,10 +1,15 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { createAnnouncementId } from '../../lib/assignments'
+import { resolvePostAttachmentForSave } from '../../lib/supabase/postAttachments'
+import PostAttachmentField from '../ui/PostAttachmentField'
 import type { AnnouncementFormInput, Assignment } from '../../types'
 
 interface AnnouncementFormModalProps {
   isOpen: boolean
   className: string
+  classKey: string
+  teacherUserId?: string | null
   announcement?: Assignment | null
   onClose: () => void
   onSaveDraft: (input: AnnouncementFormInput) => void
@@ -15,6 +20,8 @@ interface AnnouncementFormModalProps {
 export default function AnnouncementFormModal({
   isOpen,
   className,
+  classKey,
+  teacherUserId,
   announcement,
   onClose,
   onSaveDraft,
@@ -24,11 +31,19 @@ export default function AnnouncementFormModal({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [resourceLink, setResourceLink] = useState('')
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [removeAttachment, setRemoveAttachment] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const isEdit = Boolean(announcement)
 
   useEffect(() => {
     if (!isOpen) return
+    setPendingFile(null)
+    setRemoveAttachment(false)
+    setSaveError(null)
+    setSaving(false)
     if (announcement) {
       setTitle(announcement.title)
       setDescription(announcement.description)
@@ -46,7 +61,10 @@ export default function AnnouncementFormModal({
 
   if (!isOpen) return null
 
-  const buildInput = (): AnnouncementFormInput | null => {
+  const buildBaseInput = (): Omit<
+    AnnouncementFormInput,
+    'attachment' | 'id'
+  > | null => {
     const trimmed = title.trim()
     if (!trimmed) return null
     return {
@@ -56,18 +74,49 @@ export default function AnnouncementFormModal({
     }
   }
 
-  const handleDraft = () => {
-    const input = buildInput()
-    if (!input) return
-    onSaveDraft(input)
-    onClose()
+  const finalizeInput = async (): Promise<AnnouncementFormInput | null> => {
+    const base = buildBaseInput()
+    if (!base) return null
+    const postId = announcement?.id ?? createAnnouncementId()
+    const attachment = await resolvePostAttachmentForSave({
+      teacherUserId,
+      classKey,
+      postId,
+      existing: announcement?.attachment,
+      pendingFile,
+      removeExisting: removeAttachment,
+    })
+    return { ...base, id: postId, attachment }
   }
 
-  const handlePublish = () => {
-    const input = buildInput()
-    if (!input) return
-    onPublish(input)
-    onClose()
+  const handleDraft = async () => {
+    setSaveError(null)
+    setSaving(true)
+    try {
+      const input = await finalizeInput()
+      if (!input) return
+      onSaveDraft(input)
+      onClose()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePublish = async () => {
+    setSaveError(null)
+    setSaving(true)
+    try {
+      const input = await finalizeInput()
+      if (!input) return
+      onPublish(input)
+      onClose()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -126,6 +175,16 @@ export default function AnnouncementFormModal({
             />
           </label>
 
+          <PostAttachmentField
+            existing={announcement?.attachment}
+            pendingFile={pendingFile}
+            onPendingFileChange={setPendingFile}
+            removeExisting={removeAttachment}
+            onRemoveExistingChange={setRemoveAttachment}
+            disabled={saving}
+            cloudRequired={Boolean(pendingFile) && !teacherUserId}
+          />
+
           <label className="block">
             <span className="text-sm font-medium text-slate-700">
               Link (optional)
@@ -138,6 +197,12 @@ export default function AnnouncementFormModal({
               className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-[#185560] focus:outline-none focus:ring-2 focus:ring-[#185560]/20"
             />
           </label>
+
+          {saveError && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {saveError}
+            </p>
+          )}
         </form>
 
         <div className="flex flex-col gap-2 border-t border-slate-100 px-5 py-4">
@@ -159,23 +224,30 @@ export default function AnnouncementFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              disabled={saving}
+              className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={handleDraft}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => void handleDraft()}
+              disabled={saving}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              Save draft
+              {saving ? 'Saving…' : 'Save draft'}
             </button>
             <button
               type="button"
-              onClick={handlePublish}
-              className="rounded-lg bg-[#185560] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#134851]"
+              onClick={() => void handlePublish()}
+              disabled={saving}
+              className="rounded-lg bg-[#185560] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#134851] disabled:opacity-50"
             >
-              {announcement?.status === 'published' ? 'Save & keep published' : 'Publish'}
+              {saving
+                ? 'Saving…'
+                : announcement?.status === 'published'
+                  ? 'Save & keep published'
+                  : 'Publish'}
             </button>
           </div>
         </div>

@@ -44,6 +44,8 @@ If part 1 succeeded but part 2 failed, only re-run the missing part(s).
 
 7. **`supabase/schema-7-submission-storage-read.sql`** — run if teachers cannot open student submission files (storage read policy fix).
 
+8. **`supabase/schema-8-post-attachments.sql`** — run to enable **teacher file uploads** on assignments and announcements (`post-attachments` storage bucket).
+
 ## 3. Enable Google sign-in
 
 1. **Authentication → Providers → Google** — enable and add your Google OAuth client ID/secret.
@@ -129,6 +131,7 @@ If Supabase is missing on Netlify, the live site runs in **demo mode** (localSto
 | Approved enrollments | `student_enrollments` |
 | Assignment submissions & grades | `assignment_submissions`, `submission_files` |
 | Uploaded student files | Storage bucket `assignment-submissions` |
+| Teacher post attachments | Storage bucket `post-attachments` (schema 8) |
 
 Teachers and students sign in with **email/password** or **Google**. Students join classes with a code; teachers approve requests in the dashboard.
 

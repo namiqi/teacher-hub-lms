@@ -171,6 +171,7 @@ export function migrateAssignment(
           ? raw.status
           : 'published',
       resourceLink: raw.resourceLink?.trim() || undefined,
+      attachment: ext.attachment,
       maxPoints: ext.maxPoints ?? 10,
       allowLateSubmissions: ext.allowLateSubmissions ?? false,
       maxResubmissions: ext.maxResubmissions ?? 0,
@@ -220,7 +221,7 @@ export function buildAssignmentFromInput(
 ): Assignment {
   const now = new Date().toISOString()
   return {
-    id: existing?.id ?? createAssignmentId(),
+    id: existing?.id ?? input.id ?? createAssignmentId(),
     classKey,
     kind: 'assignment',
     title: input.title.trim(),
@@ -229,6 +230,7 @@ export function buildAssignmentFromInput(
     createdAt: existing?.createdAt ?? now,
     status,
     resourceLink: input.resourceLink?.trim() || undefined,
+    attachment: input.attachment ?? existing?.attachment,
     maxPoints: Math.max(1, Math.round(input.maxPoints || 10)),
     allowLateSubmissions: input.allowLateSubmissions,
     maxResubmissions: Math.max(0, Math.round(input.maxResubmissions || 0)),
@@ -243,7 +245,7 @@ export function buildAnnouncementFromInput(
 ): Assignment {
   const now = new Date().toISOString()
   return {
-    id: existing?.id ?? createAnnouncementId(),
+    id: existing?.id ?? input.id ?? createAnnouncementId(),
     classKey,
     kind: 'announcement',
     title: input.title.trim(),
@@ -252,5 +254,6 @@ export function buildAnnouncementFromInput(
     createdAt: existing?.createdAt ?? now,
     status: status === 'draft' ? 'draft' : 'published',
     resourceLink: input.resourceLink?.trim() || undefined,
+    attachment: input.attachment ?? existing?.attachment,
   }
 }

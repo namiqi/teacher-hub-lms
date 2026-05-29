@@ -46,6 +46,14 @@ export type AssignmentStatus = 'draft' | 'published' | 'closed'
 
 export type ClassPostKind = 'assignment' | 'announcement'
 
+/** Optional file attached to an assignment or announcement (Supabase Storage). */
+export interface PostAttachment {
+  storagePath: string
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+}
+
 export interface Assignment {
   id: string
   classKey: string
@@ -55,8 +63,10 @@ export interface Assignment {
   dueAt: string
   createdAt: string
   status: AssignmentStatus
-  /** Optional worksheet / Drive link (MVP attachment) */
+  /** Optional worksheet / Drive link */
   resourceLink?: string
+  /** Optional uploaded file (PDF, image, Word). */
+  attachment?: PostAttachment
   /** Max score when graded (assignments only). */
   maxPoints?: number
   /** Whether students may submit after the due date. */
@@ -66,10 +76,13 @@ export interface Assignment {
 }
 
 export interface AssignmentFormInput {
+  /** Set when creating a new post so storage path matches saved id. */
+  id?: string
   title: string
   description: string
   dueAt: string
   resourceLink?: string
+  attachment?: PostAttachment
   maxPoints: number
   allowLateSubmissions: boolean
   maxResubmissions: number
@@ -113,9 +126,11 @@ export interface ClassEnrollment {
 }
 
 export interface AnnouncementFormInput {
+  id?: string
   title: string
   description: string
   resourceLink?: string
+  attachment?: PostAttachment
 }
 
 export type TopUpPackage = 'standard' | 'intensive' | 'custom'

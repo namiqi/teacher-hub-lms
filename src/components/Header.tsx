@@ -1,13 +1,21 @@
-import { Bell, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import type { TabId } from '../types'
 import { HEADER_TITLES } from '../types'
+import TeacherNotificationsMenu, {
+  type TeacherNotificationItem,
+} from './TeacherNotificationsMenu'
 
 interface HeaderProps {
   activeTab: TabId
   onCreateClass: () => void
+  notifications: TeacherNotificationItem[]
 }
 
-export default function Header({ activeTab, onCreateClass }: HeaderProps) {
+export default function Header({
+  activeTab,
+  onCreateClass,
+  notifications,
+}: HeaderProps) {
   return (
     <header className="hidden h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 md:flex md:px-8">
       <div className="min-w-0">
@@ -17,17 +25,7 @@ export default function Header({ activeTab, onCreateClass }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-4">
-        <button
-          type="button"
-          className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5" strokeWidth={2} />
-          <span className="absolute right-1.5 top-1.5 flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-          </span>
-        </button>
+        <TeacherNotificationsMenu items={notifications} variant="desktop" />
 
         {(activeTab === 'overview' || activeTab === 'classes') && (
           <button

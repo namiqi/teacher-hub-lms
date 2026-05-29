@@ -47,6 +47,7 @@ interface ClassAssignmentsPanelProps {
     existingId?: string,
   ) => void
   onDeleteAssignment: (assignmentId: string) => void
+  onSubmissionsReviewed?: () => void
 }
 
 function PostMoreMenu({
@@ -116,6 +117,7 @@ export default function ClassAssignmentsPanel({
   onSaveAssignment,
   onSaveAnnouncement,
   onDeleteAssignment,
+  onSubmissionsReviewed,
 }: ClassAssignmentsPanelProps) {
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false)
@@ -312,6 +314,8 @@ export default function ClassAssignmentsPanel({
       <AssignmentFormModal
         isOpen={assignmentFormOpen}
         className={cls.name}
+        classKey={cls.classKey}
+        teacherUserId={teacherUserId}
         assignment={editing && !isAnnouncement(editing) ? editing : null}
         onClose={() => {
           setAssignmentFormOpen(false)
@@ -328,6 +332,8 @@ export default function ClassAssignmentsPanel({
       <AnnouncementFormModal
         isOpen={announcementFormOpen}
         className={cls.name}
+        classKey={cls.classKey}
+        teacherUserId={teacherUserId}
         announcement={editing && isAnnouncement(editing) ? editing : null}
         onClose={() => {
           setAnnouncementFormOpen(false)
@@ -349,8 +355,12 @@ export default function ClassAssignmentsPanel({
           onClose={() => {
             setSubmissionsFor(null)
             refreshUnreviewedCounts()
+            onSubmissionsReviewed?.()
           }}
-          onReviewed={refreshUnreviewedCounts}
+          onReviewed={() => {
+            refreshUnreviewedCounts()
+            onSubmissionsReviewed?.()
+          }}
         />
       )}
     </>

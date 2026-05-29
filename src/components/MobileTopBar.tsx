@@ -1,11 +1,15 @@
-import { Bell, LogOut, Settings } from 'lucide-react'
+import { LogOut, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { TabId, User } from '../types'
 import { HEADER_TITLES } from '../types'
+import TeacherNotificationsMenu, {
+  type TeacherNotificationItem,
+} from './TeacherNotificationsMenu'
 
 interface MobileTopBarProps {
   user: User
   activeTab: TabId
+  notifications: TeacherNotificationItem[]
   onOpenProfile: () => void
   onSignOut: () => void
 }
@@ -13,6 +17,7 @@ interface MobileTopBarProps {
 export default function MobileTopBar({
   user,
   activeTab,
+  notifications,
   onOpenProfile,
   onSignOut,
 }: MobileTopBarProps) {
@@ -49,13 +54,7 @@ export default function MobileTopBar({
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          className="rounded-lg p-2 text-[#185560] transition-colors hover:bg-[rgba(24,85,96,0.08)]"
-          aria-label="Notifications (coming soon)"
-        >
-          <Bell className="h-5 w-5" strokeWidth={2.1} />
-        </button>
+        <TeacherNotificationsMenu items={notifications} variant="mobile" />
         <div className="relative" ref={menuRef}>
           <button
             type="button"

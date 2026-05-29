@@ -251,6 +251,17 @@ export async function fetchUnreviewedCountsByAssignment(
   return counts
 }
 
+export async function fetchTotalUnreviewedCount(
+  teacherUserId: string,
+  assignmentIds: string[],
+): Promise<number> {
+  const counts = await fetchUnreviewedCountsByAssignment(
+    teacherUserId,
+    assignmentIds,
+  )
+  return Object.values(counts).reduce((sum, n) => sum + n, 0)
+}
+
 /** Opens file in a new browser tab (inline for PDF/images, not forced download). */
 export async function openSubmissionFileInNewTab(
   storagePath: string,
