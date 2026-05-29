@@ -38,6 +38,8 @@ If part 1 succeeded but part 2 failed, only re-run the missing part(s).
 
 4. **`supabase/schema-4-rls-insert.sql`** — run if student sign-up shows **Student profile not found** (allows the app to create profile rows after sign-up).
 
+5. **`supabase/schema-5-join-code-lookup.sql`** — run if students get **Invalid class code** when joining (allows join lookup before enrollment).
+
 ## 3. Enable Google sign-in
 
 1. **Authentication → Providers → Google** — enable and add your Google OAuth client ID/secret.

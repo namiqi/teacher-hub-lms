@@ -62,7 +62,7 @@ export default function JoinClassModal({
         const found = await findClassByJoinCodeRemote(code)
         if (!found) {
           setError(
-            'Invalid class code. Ask your teacher for the code from Manage class.',
+            'Class code not found. Ask your teacher to open the app and copy the code again from Manage class (teacher must save their class first).',
           )
           return
         }

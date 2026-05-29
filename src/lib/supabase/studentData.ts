@@ -22,11 +22,35 @@ export async function fetchStudentProfile(
   }
 }
 
+type JoinCodeLookupRow = {
+  teacher_id: string
+  class_key: string
+  class: Class
+}
+
 export async function findClassByJoinCodeRemote(
   codeInput: string,
 ): Promise<{ cls: Class; teacherId: string } | null> {
   const normalized = normalizeJoinCodeInput(codeInput)
-  const { data: codeRow, error } = await getSupabase()
+  const supabase = getSupabase()
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    'lookup_class_by_join_code',
+    { p_code: normalized },
+  )
+
+  if (!rpcError && rpcData && typeof rpcData === 'object') {
+    const row = rpcData as JoinCodeLookupRow
+    if (row.class && row.teacher_id) {
+      return { cls: row.class, teacherId: row.teacher_id }
+    }
+  }
+
+  if (rpcError) {
+    console.warn('[Teacher Hub] join code RPC failed, trying direct lookup', rpcError)
+  }
+
+  const { data: codeRow, error } = await supabase
     .from('class_join_codes')
     .select('teacher_id, class_key')
     .eq('join_code', normalized)
@@ -34,7 +58,7 @@ export async function findClassByJoinCodeRemote(
 
   if (error || !codeRow) return null
 
-  const { data: wsRow, error: wsError } = await getSupabase()
+  const { data: wsRow, error: wsError } = await supabase
     .from('teacher_workspaces')
     .select('workspace')
     .eq('teacher_id', codeRow.teacher_id)
@@ -44,9 +68,7 @@ export async function findClassByJoinCodeRemote(
 
   const classes = (wsRow.workspace as { classes?: Class[] }).classes ?? []
   const cls = classes.find(
-    (c) =>
-      c.classKey === codeRow.class_key &&
-      c.status === 'active',
+    (c) => c.classKey === codeRow.class_key && c.status === 'active',
   )
   if (!cls) return null
 

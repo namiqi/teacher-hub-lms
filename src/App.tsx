@@ -95,6 +95,7 @@ import { flushTeacherWorkspaceSave, scheduleTeacherWorkspaceSave } from './lib/s
 import { resolveStudentSession } from './lib/supabase/sessionBridge'
 import { insertJoinRequestRemote } from './lib/supabase/studentData'
 import {
+  ensureClassJoinCodesSynced,
   fetchTeacherWorkspace,
   insertStudentEnrollment,
   type TeacherCloudState,
@@ -242,6 +243,10 @@ function App() {
       shouldPersistPayments.current = false
       shouldPersistJoinRequests.current = false
       shouldPersistAssignments.current = false
+
+      void ensureClassJoinCodesSynced(teacherId, state.classes).catch((err) => {
+        console.error('[Teacher Hub] Failed to sync class join codes', err)
+      })
     },
     [],
   )

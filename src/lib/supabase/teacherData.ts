@@ -117,6 +117,14 @@ export async function saveTeacherWorkspace(
   await syncClassJoinCodes(teacherId, classes)
 }
 
+/** Publish active class join codes for student lookup (call after loading workspace). */
+export async function ensureClassJoinCodesSynced(
+  teacherId: string,
+  classes: Class[],
+): Promise<void> {
+  await syncClassJoinCodes(teacherId, classes)
+}
+
 async function syncClassJoinCodes(teacherId: string, classes: Class[]): Promise<void> {
   const supabase = getSupabase()
   await supabase.from('class_join_codes').delete().eq('teacher_id', teacherId)
