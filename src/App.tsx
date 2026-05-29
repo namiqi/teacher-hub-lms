@@ -115,6 +115,7 @@ import type {
   AnnouncementFormInput,
   Assignment,
   AssignmentFormInput,
+  ClassEnrollment,
   JoinRequest,
   PaymentRecord,
   Student,
@@ -174,6 +175,7 @@ function App() {
   const [assignments, setAssignments] = useState<Assignment[]>(() =>
     loadAssignments(loadClasses()),
   )
+  const [classEnrollments, setClassEnrollments] = useState<ClassEnrollment[]>([])
 
   const pendingJoinCount = useMemo(
     () => pendingRequestsForTeacher(joinRequests, classes).length,
@@ -265,6 +267,7 @@ function App() {
       setClasses(portal.classes)
       setStudents(portal.students)
       setJoinRequests(portal.joinRequests)
+      setClassEnrollments(portal.enrollments)
       setAssignments(portal.assignments)
       setPayments(portal.payments)
       setAttendance(portal.attendance)
@@ -1364,6 +1367,7 @@ function App() {
         payments={payments}
         attendance={attendance}
         enrollmentScopedClasses={useCloud}
+        classEnrollments={classEnrollments}
         studentUserId={studentUserId}
         onSignOut={handleStudentSignOut}
         onSubmitJoinRequest={handleStudentSubmitJoin}
@@ -1430,6 +1434,7 @@ function App() {
               cls={workspaceClass}
               students={students}
               assignments={assignments}
+              teacherUserId={teacherUserId}
               onBack={() => setTeacherClassId(null)}
               onOpenSettings={() => {
                 setManageClassId(workspaceClass.id)

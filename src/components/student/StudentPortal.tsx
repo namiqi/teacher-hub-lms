@@ -12,6 +12,7 @@ import type {
   Assignment,
   AttendanceLedger,
   Class,
+  ClassEnrollment,
   JoinRequest,
   PaymentRecord,
   Student,
@@ -30,6 +31,7 @@ interface StudentPortalProps {
   attendance: AttendanceLedger
   /** When true, `classes` is already filtered to this student's enrollments (Supabase). */
   enrollmentScopedClasses?: boolean
+  classEnrollments?: ClassEnrollment[]
   studentUserId?: string | null
   onSignOut: () => void
   onSubmitJoinRequest: (request: JoinRequest) => void | Promise<void>
@@ -44,6 +46,7 @@ export default function StudentPortal({
   payments,
   attendance,
   enrollmentScopedClasses = false,
+  classEnrollments = [],
   studentUserId,
   onSignOut,
   onSubmitJoinRequest,
@@ -104,6 +107,11 @@ export default function StudentPortal({
         : undefined,
     [selectedAssignmentId, assignments],
   )
+
+  const selectedEnrollment = useMemo(() => {
+    if (!selectedClass) return undefined
+    return classEnrollments.find((e) => e.classKey === selectedClass.classKey)
+  }, [selectedClass, classEnrollments])
 
   const openClass = (classKey: string) => {
     setSelectedClassKey(classKey)
@@ -174,6 +182,10 @@ export default function StudentPortal({
             <StudentAssignmentDetail
               assignment={selectedAssignment}
               className={selectedClass.name}
+              classKey={selectedClass.classKey}
+              teacherId={selectedEnrollment?.teacherId}
+              studentUserId={studentUserId}
+              studentId={selectedEnrollment?.studentId}
               onBack={() => setSelectedAssignmentId(null)}
             />
           ) : selectedClass ? (

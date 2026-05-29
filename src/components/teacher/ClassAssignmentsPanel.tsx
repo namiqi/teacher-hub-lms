@@ -1,5 +1,6 @@
 import {
   ClipboardList,
+  Inbox,
   Megaphone,
   MoreVertical,
   Pencil,
@@ -18,16 +19,20 @@ import {
 } from '../../lib/assignments'
 import AnnouncementFormModal from '../modals/AnnouncementFormModal'
 import AssignmentFormModal from '../modals/AssignmentFormModal'
+import TeacherAssignmentSubmissionsPanel from './TeacherAssignmentSubmissionsPanel'
 import type {
   AnnouncementFormInput,
   Assignment,
   AssignmentFormInput,
   Class,
+  Student,
 } from '../../types'
 
 interface ClassAssignmentsPanelProps {
   cls: Class
+  students: Student[]
   assignments: Assignment[]
+  teacherUserId?: string | null
   onSaveAssignment: (
     classKey: string,
     input: AssignmentFormInput,
@@ -104,7 +109,9 @@ function PostMoreMenu({
 
 export default function ClassAssignmentsPanel({
   cls,
+  students,
   assignments,
+  teacherUserId,
   onSaveAssignment,
   onSaveAnnouncement,
   onDeleteAssignment,
@@ -113,6 +120,7 @@ export default function ClassAssignmentsPanel({
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false)
   const [announcementFormOpen, setAnnouncementFormOpen] = useState(false)
   const [editing, setEditing] = useState<Assignment | null>(null)
+  const [submissionsFor, setSubmissionsFor] = useState<Assignment | null>(null)
   const createMenuRef = useRef<HTMLDivElement>(null)
 
   const classPosts = postsForClass(assignments, cls.classKey)
@@ -236,6 +244,18 @@ export default function ClassAssignmentsPanel({
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    {!isAnnouncement(post) &&
+                      teacherUserId &&
+                      post.status !== 'draft' && (
+                        <button
+                          type="button"
+                          onClick={() => setSubmissionsFor(post)}
+                          className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <Inbox className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Submissions</span>
+                        </button>
+                      )}
                     <button
                       type="button"
                       onClick={() => openEdit(post)}
@@ -287,6 +307,15 @@ export default function ClassAssignmentsPanel({
           onSaveAnnouncement(cls.classKey, input, 'publish', editing?.id)
         }
       />
+
+      {submissionsFor && teacherUserId && (
+        <TeacherAssignmentSubmissionsPanel
+          assignment={submissionsFor}
+          students={students}
+          teacherUserId={teacherUserId}
+          onClose={() => setSubmissionsFor(null)}
+        />
+      )}
     </>
   )
 }

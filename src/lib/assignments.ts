@@ -157,6 +157,7 @@ export function migrateAssignment(
       (raw as { kind?: string }).kind === 'announcement'
         ? 'announcement'
         : 'assignment'
+    const ext = raw as Assignment
     return {
       id: raw.id,
       classKey: raw.classKey,
@@ -170,6 +171,9 @@ export function migrateAssignment(
           ? raw.status
           : 'published',
       resourceLink: raw.resourceLink?.trim() || undefined,
+      maxPoints: ext.maxPoints ?? 10,
+      allowLateSubmissions: ext.allowLateSubmissions ?? false,
+      maxResubmissions: ext.maxResubmissions ?? 0,
     }
   }
 
@@ -202,6 +206,9 @@ export function migrateAssignment(
     createdAt: raw.createdAt ?? new Date().toISOString(),
     status,
     resourceLink: raw.resourceLink?.trim() || undefined,
+    maxPoints: 10,
+    allowLateSubmissions: false,
+    maxResubmissions: 0,
   }
 }
 
@@ -222,6 +229,9 @@ export function buildAssignmentFromInput(
     createdAt: existing?.createdAt ?? now,
     status,
     resourceLink: input.resourceLink?.trim() || undefined,
+    maxPoints: Math.max(1, Math.round(input.maxPoints || 10)),
+    allowLateSubmissions: input.allowLateSubmissions,
+    maxResubmissions: Math.max(0, Math.round(input.maxResubmissions || 0)),
   }
 }
 

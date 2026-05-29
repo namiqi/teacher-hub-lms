@@ -29,6 +29,9 @@ export default function AssignmentFormModal({
   const [description, setDescription] = useState('')
   const [dueInput, setDueInput] = useState('')
   const [resourceLink, setResourceLink] = useState('')
+  const [maxPoints, setMaxPoints] = useState(10)
+  const [allowLateSubmissions, setAllowLateSubmissions] = useState(false)
+  const [maxResubmissions, setMaxResubmissions] = useState(0)
 
   const isEdit = Boolean(assignment)
 
@@ -39,6 +42,9 @@ export default function AssignmentFormModal({
       setDescription(assignment.description)
       setDueInput(formatDueForInput(assignment.dueAt))
       setResourceLink(assignment.resourceLink ?? '')
+      setMaxPoints(assignment.maxPoints ?? 10)
+      setAllowLateSubmissions(assignment.allowLateSubmissions ?? false)
+      setMaxResubmissions(assignment.maxResubmissions ?? 0)
     } else {
       setTitle('')
       setDescription('')
@@ -47,6 +53,9 @@ export default function AssignmentFormModal({
       nextWeek.setHours(23, 59, 0, 0)
       setDueInput(formatDueForInput(nextWeek.toISOString()))
       setResourceLink('')
+      setMaxPoints(10)
+      setAllowLateSubmissions(false)
+      setMaxResubmissions(0)
     }
     document.body.style.overflow = 'hidden'
     return () => {
@@ -64,6 +73,9 @@ export default function AssignmentFormModal({
       description: description.trim(),
       dueAt: parseDueFromInput(dueInput),
       resourceLink: resourceLink.trim() || undefined,
+      maxPoints: Math.max(1, Math.round(Number(maxPoints) || 10)),
+      allowLateSubmissions,
+      maxResubmissions: Math.max(0, Math.round(Number(maxResubmissions) || 0)),
     }
   }
 
@@ -147,6 +159,44 @@ export default function AssignmentFormModal({
             />
           </label>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Max points</span>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={maxPoints}
+                onChange={(e) => setMaxPoints(Number(e.target.value))}
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-[#185560] focus:outline-none focus:ring-2 focus:ring-[#185560]/20"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">
+                Extra resubmits
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={20}
+                value={maxResubmissions}
+                onChange={(e) => setMaxResubmissions(Number(e.target.value))}
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-[#185560] focus:outline-none focus:ring-2 focus:ring-[#185560]/20"
+              />
+              <p className="mt-1 text-xs text-slate-400">0 = one submit only</p>
+            </label>
+          </div>
+
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={allowLateSubmissions}
+              onChange={(e) => setAllowLateSubmissions(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-[#185560] focus:ring-[#185560]/30"
+            />
+            <span className="text-sm text-slate-700">Allow late submissions</span>
+          </label>
+
           <label className="block">
             <span className="text-sm font-medium text-slate-700">
               Resource link (optional)
@@ -159,7 +209,7 @@ export default function AssignmentFormModal({
               className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-[#185560] focus:outline-none focus:ring-2 focus:ring-[#185560]/20"
             />
             <p className="mt-1 text-xs text-slate-400">
-              Paste a link to a PDF or shared folder. File upload comes later.
+              Paste a link to a worksheet or shared folder for students.
             </p>
           </label>
         </form>

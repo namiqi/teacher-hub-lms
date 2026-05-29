@@ -40,6 +40,8 @@ If part 1 succeeded but part 2 failed, only re-run the missing part(s).
 
 5. **`supabase/schema-5-join-code-lookup.sql`** — run if students get **Invalid class code** when joining (allows join lookup before enrollment).
 
+6. **`supabase/schema-6-assignment-submissions.sql`** — run to enable **assignment file submissions**, grading, and the `assignment-submissions` storage bucket.
+
 ## 3. Enable Google sign-in
 
 1. **Authentication → Providers → Google** — enable and add your Google OAuth client ID/secret.
@@ -123,5 +125,9 @@ If Supabase is missing on Netlify, the live site runs in **demo mode** (localSto
 | Join requests | `join_requests` |
 | Student auth profile | `student_profiles` |
 | Approved enrollments | `student_enrollments` |
+| Assignment submissions & grades | `assignment_submissions`, `submission_files` |
+| Uploaded student files | Storage bucket `assignment-submissions` |
 
 Teachers and students sign in with **email/password** or **Google**. Students join classes with a code; teachers approve requests in the dashboard.
+
+**Assignments** (title, due date, max points, late/resubmit rules) stay in the teacher workspace JSON. **Submitted files** live in Supabase Storage and metadata tables after schema 6.

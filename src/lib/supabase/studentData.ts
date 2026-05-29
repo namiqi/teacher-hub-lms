@@ -1,5 +1,5 @@
 import { normalizeJoinCodeInput } from '../joinCodes'
-import type { Class, JoinRequest, StudentAccount } from '../../types'
+import type { Class, ClassEnrollment, JoinRequest, StudentAccount } from '../../types'
 import { getSupabase } from './client'
 
 export async function fetchStudentProfile(
@@ -164,6 +164,7 @@ export async function fetchJoinRequestsForStudent(
 
 export type StudentPortalData = {
   joinRequests: JoinRequest[]
+  enrollments: ClassEnrollment[]
   classes: Class[]
   students: import('../../types').Student[]
   assignments: import('../../types').Assignment[]
@@ -177,12 +178,18 @@ export async function fetchStudentPortalData(
 ): Promise<StudentPortalData> {
   const joinRequests = await fetchJoinRequestsForStudent(userId)
 
-  const { data: enrollments, error: enrollError } = await getSupabase()
+  const { data: enrollmentRows, error: enrollError } = await getSupabase()
     .from('student_enrollments')
     .select('teacher_id, class_key, student_id')
     .eq('student_user_id', userId)
 
   if (enrollError) throw new Error(enrollError.message)
+
+  const enrollments: ClassEnrollment[] = (enrollmentRows ?? []).map((e) => ({
+    teacherId: e.teacher_id,
+    classKey: e.class_key,
+    studentId: e.student_id,
+  }))
 
   const classes: Class[] = []
   const students: import('../../types').Student[] = []
@@ -193,7 +200,7 @@ export async function fetchStudentPortalData(
     recordsByClass: {},
   }
 
-  const teacherIds = [...new Set((enrollments ?? []).map((e) => e.teacher_id))]
+  const teacherIds = [...new Set(enrollments.map((e) => e.teacherId))]
 
   for (const teacherId of teacherIds) {
     const { data: wsRow } = await getSupabase()
@@ -212,9 +219,9 @@ export async function fetchStudentPortalData(
     }
 
     const enrolledKeys = new Set(
-      (enrollments ?? [])
-        .filter((e) => e.teacher_id === teacherId)
-        .map((e) => e.class_key),
+      enrollments
+        .filter((e) => e.teacherId === teacherId)
+        .map((e) => e.classKey),
     )
 
     for (const c of w.classes ?? []) {
@@ -222,9 +229,9 @@ export async function fetchStudentPortalData(
     }
 
     const myStudentIds = new Set(
-      (enrollments ?? [])
-        .filter((e) => e.teacher_id === teacherId)
-        .map((e) => e.student_id),
+      enrollments
+        .filter((e) => e.teacherId === teacherId)
+        .map((e) => e.studentId),
     )
 
     for (const s of w.students ?? []) {
@@ -258,6 +265,7 @@ export async function fetchStudentPortalData(
 
   return {
     joinRequests,
+    enrollments,
     classes,
     students,
     assignments,

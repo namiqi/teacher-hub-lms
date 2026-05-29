@@ -12,6 +12,7 @@ interface TeacherClassWorkspaceProps {
   cls: Class
   students: Student[]
   assignments: Assignment[]
+  teacherUserId?: string | null
   onBack: () => void
   onOpenSettings: () => void
   onSaveAssignment: (
@@ -33,6 +34,7 @@ export default function TeacherClassWorkspace({
   cls,
   students,
   assignments,
+  teacherUserId,
   onBack,
   onOpenSettings,
   onSaveAssignment,
@@ -84,7 +86,9 @@ export default function TeacherClassWorkspace({
 
       <ClassAssignmentsPanel
         cls={cls}
+        students={students}
         assignments={assignments}
+        teacherUserId={teacherUserId}
         onSaveAssignment={onSaveAssignment}
         onSaveAnnouncement={onSaveAnnouncement}
         onDeleteAssignment={onDeleteAssignment}

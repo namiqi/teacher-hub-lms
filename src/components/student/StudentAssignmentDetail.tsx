@@ -6,17 +6,26 @@ import {
   postKindLabel,
   postKindStyles,
 } from '../../lib/assignments'
+import StudentAssignmentSubmitSection from './StudentAssignmentSubmitSection'
 import type { Assignment } from '../../types'
 
 interface StudentAssignmentDetailProps {
   assignment: Assignment
   className: string
+  classKey: string
+  teacherId?: string
+  studentUserId?: string | null
+  studentId?: number
   onBack: () => void
 }
 
 export default function StudentAssignmentDetail({
   assignment,
   className,
+  classKey,
+  teacherId,
+  studentUserId,
+  studentId,
   onBack,
 }: StudentAssignmentDetailProps) {
   const announcement = isAnnouncement(assignment)
@@ -83,12 +92,21 @@ export default function StudentAssignmentDetail({
             </div>
           )}
 
-          {!announcement && (
-            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-              Submitting work from the app will be available in a future update. For
-              now, follow your teacher&apos;s instructions in class or by email.
-            </p>
-          )}
+          {!announcement &&
+            (teacherId && studentUserId && studentId != null ? (
+              <StudentAssignmentSubmitSection
+                assignment={assignment}
+                teacherId={teacherId}
+                classKey={classKey}
+                studentUserId={studentUserId}
+                studentId={studentId}
+              />
+            ) : (
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                Sign in with your student account on the hosted app to submit work
+                here.
+              </p>
+            ))}
         </div>
       </article>
     </div>

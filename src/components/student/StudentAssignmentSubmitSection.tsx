@@ -1,0 +1,281 @@
+import { Download, FileText, Loader2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { isSupabaseConfigured } from '../../lib/supabase/client'
+import {
+  fetchMySubmission,
+  getSubmissionFileSignedUrl,
+  submitAssignmentWork,
+} from '../../lib/supabase/submissions'
+import {
+  ALLOWED_SUBMISSION_EXTENSIONS,
+  isPreviewableMime,
+  validateSubmissionFiles,
+} from '../../lib/submissions/constants'
+import {
+  attemptsRemaining,
+  canSubmitAssignment,
+} from '../../lib/submissions/rules'
+import type { Assignment, AssignmentSubmission } from '../../types'
+
+interface StudentAssignmentSubmitSectionProps {
+  assignment: Assignment
+  teacherId: string
+  classKey: string
+  studentUserId: string
+  studentId: number
+}
+
+export default function StudentAssignmentSubmitSection({
+  assignment,
+  teacherId,
+  classKey,
+  studentUserId,
+  studentId,
+}: StudentAssignmentSubmitSectionProps) {
+  const [submission, setSubmission] = useState<AssignmentSubmission | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [note, setNote] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewLabel, setPreviewLabel] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const row = await fetchMySubmission(assignment.id, studentUserId)
+      setSubmission(row)
+      setNote(row?.note ?? '')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load submission.')
+    } finally {
+      setLoading(false)
+    }
+  }, [assignment.id, studentUserId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  if (!isSupabaseConfigured()) {
+    return (
+      <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+        Online submissions require the hosted app with Supabase configured.
+      </p>
+    )
+  }
+
+  const gate = canSubmitAssignment(assignment, submission)
+  const remaining = attemptsRemaining(assignment, submission)
+  const maxPoints = assignment.maxPoints ?? 10
+
+  const handleSubmit = async () => {
+    const fileError = validateSubmissionFiles(files)
+    if (fileError) {
+      setError(fileError)
+      return
+    }
+    if (!gate.ok) {
+      setError(gate.reason)
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      const saved = await submitAssignmentWork({
+        assignment,
+        teacherId,
+        classKey,
+        studentUserId,
+        studentId,
+        note,
+        files,
+      })
+      setSubmission(saved)
+      setFiles([])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Submit failed.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const openFile = async (storagePath: string, fileName: string, mime: string) => {
+    try {
+      const url = await getSubmissionFileSignedUrl(storagePath)
+      if (isPreviewableMime(mime)) {
+        setPreviewUrl(url)
+        setPreviewLabel(fileName)
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open file.')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading your submission…
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4 border-t border-slate-100 pt-4">
+      <div>
+        <h2 className="text-sm font-semibold text-slate-800">Your work</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Worth up to {maxPoints} points
+          {assignment.allowLateSubmissions
+            ? ' · Late submissions allowed'
+            : ''}
+          {remaining > 0 && submission
+            ? ` · ${remaining} attempt${remaining === 1 ? '' : 's'} left`
+            : !submission && remaining > 0
+              ? ` · ${remaining + (submission ? 0 : 1)} submit${remaining === 0 ? '' : 's'} allowed`
+              : ''}
+        </p>
+      </div>
+
+      {submission && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-sm">
+          <p className="font-medium text-slate-800">
+            {submission.status === 'reviewed' ? 'Graded' : 'Submitted'}
+            {submission.isLate ? (
+              <span className="ml-2 text-xs font-normal text-amber-700">(late)</span>
+            ) : null}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Attempt {submission.attemptNumber} ·{' '}
+            {new Date(submission.submittedAt).toLocaleString()}
+          </p>
+          {submission.status === 'reviewed' && submission.score != null && (
+            <p className="mt-2 font-semibold text-emerald-800">
+              Score: {submission.score} / {submission.maxPoints}
+            </p>
+          )}
+          {submission.feedback && (
+            <p className="mt-2 whitespace-pre-wrap text-slate-600">{submission.feedback}</p>
+          )}
+          {submission.note && (
+            <p className="mt-2 text-xs text-slate-600">
+              <span className="font-medium">Your note:</span> {submission.note}
+            </p>
+          )}
+          {submission.files.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {submission.files.map((f) => (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    onClick={() => void openFile(f.storagePath, f.fileName, f.mimeType)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:underline"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    {f.fileName}
+                    {!isPreviewableMime(f.mimeType) && (
+                      <Download className="h-3 w-3 opacity-60" />
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {previewUrl && (
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+            {previewLabel}
+            <button
+              type="button"
+              className="text-violet-700 hover:underline"
+              onClick={() => {
+                setPreviewUrl(null)
+                setPreviewLabel(null)
+              }}
+            >
+              Close preview
+            </button>
+          </div>
+          <iframe
+            title={previewLabel ?? 'Preview'}
+            src={previewUrl}
+            className="h-72 w-full bg-white sm:h-96"
+          />
+        </div>
+      )}
+
+      {gate.ok ? (
+        <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+          <label className="block">
+            <span className="text-xs font-medium text-slate-700">
+              Note to teacher (optional)
+            </span>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              placeholder="Anything your teacher should know…"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-xs font-medium text-slate-700">
+              Files {submission ? '(replaces previous files)' : ''}
+            </span>
+            <input
+              type="file"
+              multiple
+              accept={ALLOWED_SUBMISSION_EXTENSIONS}
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              className="mt-1 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-violet-800"
+            />
+            <p className="mt-1 text-[11px] text-slate-400">
+              PDF, PNG, JPEG, or Word · up to 3 files · 10 MB each
+            </p>
+            {files.length > 0 && (
+              <ul className="mt-2 text-xs text-slate-600">
+                {files.map((f) => (
+                  <li key={`${f.name}-${f.size}`}>{f.name}</li>
+                ))}
+              </ul>
+            )}
+          </label>
+
+          <button
+            type="button"
+            disabled={submitting || files.length === 0}
+            onClick={() => void handleSubmit()}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 sm:w-auto"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            {submission ? 'Resubmit' : 'Submit'}
+          </button>
+        </div>
+      ) : (
+        !submission && (
+          <p className="text-xs text-slate-500">{gate.reason}</p>
+        )
+      )}
+
+      {error && (
+        <p className="text-xs font-medium text-rose-600" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
