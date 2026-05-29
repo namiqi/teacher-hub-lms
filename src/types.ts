@@ -57,6 +57,12 @@ export interface Assignment {
   status: AssignmentStatus
   /** Optional worksheet / Drive link (MVP attachment) */
   resourceLink?: string
+  /** Max score when graded (assignments only). */
+  maxPoints?: number
+  /** Whether students may submit after the due date. */
+  allowLateSubmissions?: boolean
+  /** Extra submits after the first (0 = one attempt only). */
+  maxResubmissions?: number
 }
 
 export interface AssignmentFormInput {
@@ -64,6 +70,46 @@ export interface AssignmentFormInput {
   description: string
   dueAt: string
   resourceLink?: string
+  maxPoints: number
+  allowLateSubmissions: boolean
+  maxResubmissions: number
+}
+
+export type AssignmentSubmissionStatus = 'submitted' | 'reviewed'
+
+export interface SubmissionFile {
+  id: string
+  storagePath: string
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  sortOrder: number
+}
+
+export interface AssignmentSubmission {
+  id: string
+  assignmentId: string
+  teacherId: string
+  classKey: string
+  studentUserId: string
+  studentId: number
+  note?: string
+  attemptNumber: number
+  isLate: boolean
+  maxPoints: number
+  status: AssignmentSubmissionStatus
+  score?: number
+  feedback?: string
+  submittedAt: string
+  reviewedAt?: string
+  files: SubmissionFile[]
+}
+
+/** Per-class enrollment for cloud students (uploads need teacher id). */
+export interface ClassEnrollment {
+  teacherId: string
+  classKey: string
+  studentId: number
 }
 
 export interface AnnouncementFormInput {
