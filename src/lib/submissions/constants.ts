@@ -59,7 +59,7 @@ export function mimeFromFile(file: File): string {
 }
 
 export function validateSubmissionFiles(files: File[]): string | null {
-  if (files.length === 0) return 'Add at least one file.'
+  if (files.length === 0) return null
   if (files.length > MAX_SUBMISSION_FILES) {
     return `You can upload up to ${MAX_SUBMISSION_FILES} files.`
   }

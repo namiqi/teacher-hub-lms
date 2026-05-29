@@ -144,6 +144,20 @@ export async function fetchMySubmissionsForClass(
   return rows.map((row) => mapSubmission(row, []))
 }
 
+export async function fetchAllMySubmissions(
+  studentUserId: string,
+): Promise<AssignmentSubmission[]> {
+  const { data, error } = await getSupabase()
+    .from('assignment_submissions')
+    .select('*')
+    .eq('student_user_id', studentUserId)
+    .order('submitted_at', { ascending: false })
+
+  if (error) throw new Error(error.message)
+  const rows = (data ?? []) as SubmissionRow[]
+  return rows.map((row) => mapSubmission(row, []))
+}
+
 export async function fetchMySubmission(
   assignmentId: string,
   studentUserId: string,
@@ -294,8 +308,10 @@ export async function submitAssignmentWork(params: {
   let submissionId = existing?.id
 
   if (existing) {
-    const oldPaths = existing.files.map((f) => f.storagePath)
-    await removeSubmissionFiles(existing.id, oldPaths)
+    if (files.length > 0) {
+      const oldPaths = existing.files.map((f) => f.storagePath)
+      await removeSubmissionFiles(existing.id, oldPaths)
+    }
 
     const { error: updateError } = await supabase
       .from('assignment_submissions')

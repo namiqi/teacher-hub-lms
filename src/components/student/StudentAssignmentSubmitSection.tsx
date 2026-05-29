@@ -233,7 +233,8 @@ export default function StudentAssignmentSubmitSection({
               htmlFor={fileInputId}
               className="text-xs font-medium text-slate-700"
             >
-              Files {submission ? '(replaces previous files)' : ''}
+              Files (optional)
+              {submission ? ' · picking new files replaces previous ones' : ''}
             </label>
             <input
               ref={fileInputRef}
@@ -262,7 +263,7 @@ export default function StudentAssignmentSubmitSection({
 
           <button
             type="button"
-            disabled={submitting || files.length === 0}
+            disabled={submitting}
             onClick={() => void handleSubmit()}
             className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 sm:w-auto"
           >

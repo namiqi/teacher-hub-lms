@@ -1,4 +1,9 @@
-import { Plus } from 'lucide-react'
+import { Calendar, ChevronRight, Plus } from 'lucide-react'
+import { formatAssignmentDue } from '../../../lib/assignments'
+import {
+  dueSoonStatusLabel,
+  type DueSoonItem,
+} from '../../../lib/studentNotifications'
 import StudentClassCard from '../StudentClassCard'
 import type { Class } from '../../../types'
 
@@ -6,7 +11,9 @@ interface StudentHomeTabProps {
   displayName: string
   enrolledClasses: Class[]
   pendingRequestCount: number
+  dueSoonItems: DueSoonItem[]
   onOpenClass: (classKey: string) => void
+  onOpenAssignment: (classKey: string, assignmentId: string) => void
   onJoinClass: () => void
   onViewRequests: () => void
 }
@@ -15,7 +22,9 @@ export default function StudentHomeTab({
   displayName,
   enrolledClasses,
   pendingRequestCount,
+  dueSoonItems,
   onOpenClass,
+  onOpenAssignment,
   onJoinClass,
   onViewRequests,
 }: StudentHomeTabProps) {
@@ -26,7 +35,7 @@ export default function StudentHomeTab({
           Welcome back, {displayName.split(' ')[0]}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Open a class for schedule and assignments from your teacher.
+          See what&apos;s due and open a class for full details.
         </p>
       </div>
 
@@ -42,6 +51,50 @@ export default function StudentHomeTab({
           </span>
           <span className="mt-0.5 block text-amber-700/90">View status →</span>
         </button>
+      )}
+
+      {dueSoonItems.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-violet-600" />
+            <h2 className="font-semibold text-slate-900">Due soon</h2>
+          </div>
+          <ul className="space-y-2">
+            {dueSoonItems.map((item) => (
+              <li key={item.assignmentId}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenAssignment(item.classKey, item.assignmentId)
+                  }
+                  className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition-all hover:border-violet-200 hover:shadow-md sm:p-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-900">{item.title}</p>
+                    <p className="mt-0.5 text-xs text-violet-700 sm:text-sm">
+                      {item.className}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Due {formatAssignmentDue(item.dueAt)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset sm:text-xs ${
+                        item.isOverdue
+                          ? 'bg-rose-50 text-rose-700 ring-rose-600/20'
+                          : 'bg-slate-100 text-slate-600 ring-slate-500/20'
+                      }`}
+                    >
+                      {dueSoonStatusLabel(item.workStatus, item.isOverdue)}
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-slate-300" />
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section>

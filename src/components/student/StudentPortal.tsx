@@ -1,15 +1,31 @@
 import { Plus } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import JoinClassModal from './JoinClassModal'
 import StudentAssignmentDetail from './StudentAssignmentDetail'
 import StudentClassDetail from './StudentClassDetail'
 import StudentMobileNav from './StudentMobileNav'
 import StudentMobileTopBar from './StudentMobileTopBar'
+import StudentNotificationsMenu, {
+  type StudentNotificationMenuItem,
+} from './StudentNotificationsMenu'
 import StudentSidebar from './StudentSidebar'
 import StudentHomeTab from './tabs/StudentHomeTab'
 import StudentJoinRequestsTab from './tabs/StudentJoinRequestsTab'
+import { isSupabaseConfigured } from '../../lib/supabase/client'
+import { fetchAllMySubmissions } from '../../lib/supabase/submissions'
+import {
+  buildDueSoonItems,
+  buildStudentNotificationItems,
+} from '../../lib/studentNotifications'
+import {
+  getStudentSeenState,
+  markGradedSubmissionSeen,
+  markJoinApprovedSeen,
+  markPortalVisited,
+} from '../../lib/studentSeen'
 import type {
   Assignment,
+  AssignmentSubmission,
   AttendanceLedger,
   Class,
   ClassEnrollment,
@@ -81,6 +97,28 @@ export default function StudentPortal({
     () => readStoredNav().assignmentId,
   )
   const [joinOpen, setJoinOpen] = useState(false)
+  const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([])
+  const [seenVersion, setSeenVersion] = useState(0)
+
+  const bumpSeen = useCallback(() => {
+    setSeenVersion((v) => v + 1)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      markPortalVisited(account.id)
+    }
+  }, [account.id])
+
+  useEffect(() => {
+    if (!studentUserId || !isSupabaseConfigured()) {
+      setSubmissions([])
+      return
+    }
+    void fetchAllMySubmissions(studentUserId)
+      .then(setSubmissions)
+      .catch(() => setSubmissions([]))
+  }, [studentUserId, assignments])
 
   useEffect(() => {
     sessionStorage.setItem(
@@ -125,6 +163,99 @@ export default function StudentPortal({
       .map((key) => classes.find((c) => c.classKey === key))
       .filter((c): c is Class => Boolean(c && c.status === 'active'))
   }, [enrollmentScopedClasses, linkedStudent, classes])
+
+  const enrolledClassKeys = useMemo(
+    () => enrolledClasses.map((c) => c.classKey),
+    [enrolledClasses],
+  )
+
+  const seen = useMemo(
+    () => getStudentSeenState(account.id),
+    [account.id, seenVersion],
+  )
+
+  useEffect(() => {
+    if (seen.lastVisitAt) return
+    markPortalVisited(account.id)
+    bumpSeen()
+  }, [account.id, seen.lastVisitAt, bumpSeen])
+
+  const dueSoonItems = useMemo(
+    () =>
+      buildDueSoonItems({
+        assignments,
+        enrolledClassKeys,
+        classes,
+        submissions,
+      }),
+    [assignments, enrolledClassKeys, classes, submissions],
+  )
+
+  const openClass = useCallback((classKey: string) => {
+    setActiveTab('home')
+    setSelectedClassKey(classKey)
+    setSelectedAssignmentId(null)
+  }, [])
+
+  const openAssignment = useCallback(
+    (
+      classKey: string,
+      assignmentId: string,
+      opts?: { submissionId?: string },
+    ) => {
+      setActiveTab('home')
+      setSelectedClassKey(classKey)
+      setSelectedAssignmentId(assignmentId)
+      if (opts?.submissionId) {
+        markGradedSubmissionSeen(account.id, opts.submissionId)
+        bumpSeen()
+      }
+    },
+    [account.id, bumpSeen],
+  )
+
+  const notificationItems = useMemo((): StudentNotificationMenuItem[] => {
+    const raw = buildStudentNotificationItems({
+      assignments,
+      enrolledClassKeys,
+      classes,
+      submissions,
+      joinRequests: myRequests,
+      seen,
+    })
+    return raw.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      title: item.title,
+      subtitle: item.subtitle,
+      onSelect: () => {
+        if (item.kind === 'join_approved') {
+          openClass(item.classKey)
+          if (item.joinRequestId) {
+            markJoinApprovedSeen(account.id, item.joinRequestId)
+            bumpSeen()
+          }
+          return
+        }
+        if (item.assignmentId) {
+          openAssignment(item.classKey, item.assignmentId, {
+            submissionId: item.submissionId,
+          })
+        }
+      },
+    }))
+  }, [
+    assignments,
+    enrolledClassKeys,
+    classes,
+    submissions,
+    myRequests,
+    seen,
+    account.id,
+    bumpSeen,
+    openClass,
+    openAssignment,
+  ])
 
   const selectedClass = useMemo(
     () =>
@@ -172,11 +303,6 @@ export default function StudentPortal({
     return undefined
   }, [selectedEnrollment, students, linkedStudent, navClassKey])
 
-  const openClass = (classKey: string) => {
-    setSelectedClassKey(classKey)
-    setSelectedAssignmentId(null)
-  }
-
   const closeClass = () => {
     setSelectedClassKey(null)
     setSelectedAssignmentId(null)
@@ -187,6 +313,18 @@ export default function StudentPortal({
     setSelectedClassKey(null)
     setSelectedAssignmentId(null)
   }
+
+  useEffect(() => {
+    if (!selectedAssignmentId) return
+    const sub = submissions.find(
+      (s) =>
+        s.assignmentId === selectedAssignmentId && s.status === 'reviewed',
+    )
+    if (sub) {
+      markGradedSubmissionSeen(account.id, sub.id)
+      bumpSeen()
+    }
+  }, [selectedAssignmentId, submissions, account.id, bumpSeen])
 
   const pageTitle = selectedAssignment
     ? selectedAssignment.title
@@ -207,6 +345,7 @@ export default function StudentPortal({
       <StudentMobileTopBar
         account={account}
         activeTab={activeTab}
+        notifications={notificationItems}
         classDetailName={
           selectedAssignment
             ? selectedAssignment.title
@@ -223,17 +362,20 @@ export default function StudentPortal({
       />
 
       <div className="flex min-w-0 flex-1 flex-col pt-14 md:pt-0">
-        <header className="hidden border-b border-slate-200 bg-white px-8 py-5 md:block">
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-            {pageTitle}
-          </h1>
-          {!selectedClass && (
-            <p className="mt-0.5 text-sm text-slate-500">
-              {activeTab === 'home'
-                ? 'Select a class to view schedule and assignments'
-                : 'Requests waiting for your teacher to approve'}
-            </p>
-          )}
+        <header className="hidden items-center justify-between border-b border-slate-200 bg-white px-8 py-5 md:flex">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">
+              {pageTitle}
+            </h1>
+            {!selectedClass && !selectedAssignment && (
+              <p className="mt-0.5 text-sm text-slate-500">
+                {activeTab === 'home'
+                  ? 'Due dates and class updates appear here'
+                  : 'Requests waiting for your teacher to approve'}
+              </p>
+            )}
+          </div>
+          <StudentNotificationsMenu items={notificationItems} variant="desktop" />
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-8 md:pb-8">
@@ -269,7 +411,9 @@ export default function StudentPortal({
               displayName={account.displayName}
               enrolledClasses={enrolledClasses}
               pendingRequestCount={pendingRequestCount}
+              dueSoonItems={dueSoonItems}
               onOpenClass={openClass}
+              onOpenAssignment={openAssignment}
               onJoinClass={() => setJoinOpen(true)}
               onViewRequests={() => setActiveTab('requests')}
             />

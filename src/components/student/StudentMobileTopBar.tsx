@@ -2,11 +2,15 @@ import { ArrowLeft, LogOut } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { StudentAccount, StudentTabId } from '../../types'
 import { STUDENT_HEADER_TITLES } from '../../types'
+import StudentNotificationsMenu, {
+  type StudentNotificationMenuItem,
+} from './StudentNotificationsMenu'
 
 interface StudentMobileTopBarProps {
   account: StudentAccount
   activeTab: StudentTabId
   classDetailName?: string | null
+  notifications: StudentNotificationMenuItem[]
   onBackFromClass?: () => void
   onSignOut: () => void
 }
@@ -15,6 +19,7 @@ export default function StudentMobileTopBar({
   account,
   activeTab,
   classDetailName,
+  notifications,
   onBackFromClass,
   onSignOut,
 }: StudentMobileTopBarProps) {
@@ -58,42 +63,45 @@ export default function StudentMobileTopBar({
           </span>
         </div>
       </div>
-      <div className="relative shrink-0" ref={menuRef}>
-        <button
-          type="button"
-          onClick={() => setMenuOpen((v) => !v)}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-xs font-bold text-white shadow-sm ring-2 ring-white transition-transform active:scale-95"
-          aria-label="Account menu"
-          aria-expanded={menuOpen}
-          aria-haspopup="menu"
-        >
-          {account.initials}
-        </button>
-        {menuOpen && (
-          <div
-            role="menu"
-            className="absolute right-0 z-50 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+      <div className="flex shrink-0 items-center gap-1">
+        <StudentNotificationsMenu items={notifications} variant="mobile" />
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-xs font-bold text-white shadow-sm ring-2 ring-white transition-transform active:scale-95"
+            aria-label="Account menu"
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
           >
-            <div className="border-b border-slate-100 px-3 py-2.5">
-              <p className="truncate text-sm font-medium text-slate-900">
-                {account.displayName}
-              </p>
-              <p className="truncate text-xs text-slate-500">{account.email}</p>
-            </div>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false)
-                onSignOut()
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-rose-700 hover:bg-rose-50"
+            {account.initials}
+          </button>
+          {menuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 z-50 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
             >
-              <LogOut className="h-4 w-4" />
-              Sign out
-            </button>
-          </div>
-        )}
+              <div className="border-b border-slate-100 px-3 py-2.5">
+                <p className="truncate text-sm font-medium text-slate-900">
+                  {account.displayName}
+                </p>
+                <p className="truncate text-xs text-slate-500">{account.email}</p>
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false)
+                  onSignOut()
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-rose-700 hover:bg-rose-50"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )
