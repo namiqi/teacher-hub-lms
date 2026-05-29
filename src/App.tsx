@@ -1279,7 +1279,8 @@ function App() {
         <LandingPage
           onSignIn={() => setCurrentView('login')}
           onGetStarted={() => setCurrentView('signup')}
-          onStudentPortal={() => setCurrentView('student-login')}
+          onStudentSignUp={() => setCurrentView('student-signup')}
+          onStudentSignIn={() => setCurrentView('student-login')}
           onDevBypass={useCloud ? undefined : handleDevBypass}
         />
       </>

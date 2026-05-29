@@ -5,6 +5,17 @@ import { getSupabase, isSupabaseConfigured } from './client'
 
 export type AppRole = SessionRole
 
+/** Friendlier message for Supabase free-tier auth email limits. */
+export function formatAuthError(message: string): string {
+  if (/rate limit/i.test(message)) {
+    return (
+      'Sign-up is temporarily blocked by Supabase (free plan allows very few auth emails per hour, and each sign-up attempt counts). ' +
+      'Wait about an hour, use Sign in if you already registered, or create the user in Supabase → Authentication → Users → Add user (enable Auto-confirm), then Sign in here.'
+    )
+  }
+  return message
+}
+
 export function mapTeacherUser(
   profile: { display_name: string; email: string; initials: string },
 ): User {
@@ -63,7 +74,7 @@ export async function signUpWithEmail(
       },
     },
   })
-  if (error) return { user: null, session: null, error: error.message }
+  if (error) return { user: null, session: null, error: formatAuthError(error.message) }
   return { user: data.user, session: data.session, error: null }
 }
 
@@ -79,7 +90,7 @@ export async function ensureActiveSession(
     email: email.trim(),
     password,
   })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(formatAuthError(error.message))
 }
 
 export async function signInWithEmail(
@@ -90,7 +101,7 @@ export async function signInWithEmail(
     email: email.trim(),
     password,
   })
-  return { error: error?.message ?? null }
+  return { error: error ? formatAuthError(error.message) : null }
 }
 
 export async function signInWithGoogle(role: AppRole): Promise<{ error: string | null }> {

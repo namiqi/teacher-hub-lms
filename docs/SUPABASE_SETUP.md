@@ -43,9 +43,44 @@ If part 1 succeeded but part 2 failed, only re-run the missing part(s).
    - **Site URL**: your Netlify URL (e.g. `https://your-app.netlify.app`)
    - **Redirect URLs**: add the same URL and `http://localhost:5173` for local dev.
 
-## 4. Email auth (optional)
+## 4. Email auth — turn off confirmation (recommended for testing)
 
-Under **Authentication → Providers → Email**, leave email/password enabled. Disable “Confirm email” during testing if you want instant sign-in.
+Supabase’s built-in email has a **low rate limit** on the free plan. Each sign-up with “Confirm email” on sends a message and you may see **`email rate limit exceeded`**.
+
+### Turn off confirm email
+
+1. **Authentication** (left sidebar)
+2. **Sign In / Providers**
+3. Open **Email**
+4. Ensure **Enable Email provider** is **ON**
+5. Turn **OFF**:
+   - **Confirm email** (sometimes labeled “Enable email confirmations”)
+6. **Save**
+
+Users can sign up and sign in **immediately** with password — no confirmation link. The app already supports this.
+
+### If you still see `email rate limit exceeded`
+
+Turning off confirm email **stops confirmation mails**, but Supabase’s **built-in mailer** on the free plan still caps auth traffic at about **2 emails per hour**. Failed sign-up attempts can count toward that limit even when no email is sent.
+
+**Fastest workaround (no waiting):**
+
+1. Supabase → **Authentication → Users**
+2. Click **Add user** → **Create new user**
+3. Enter email + password
+4. Enable **Auto Confirm User** (important)
+5. Save
+6. On your site, use **Sign in** (not Sign up) with that email and password
+
+**Other options:**
+
+- **Wait ~1 hour** for the limit to reset, then try **Sign in** if the user already exists from an earlier attempt.
+- **Authentication → Logs** — filter Auth to see sign-up vs rate-limit events.
+- **Long-term fix:** **Authentication → SMTP Settings** → add custom SMTP (e.g. [Resend](https://resend.com) free tier), then **Authentication → Rate Limits** → raise email limits.
+
+### Optional: disable extra auth emails
+
+**Authentication → Emails** — you can turn off templates you do not need during testing (e.g. “Confirm signup”) after confirmation is disabled in Providers.
 
 ## 5. Local development
 

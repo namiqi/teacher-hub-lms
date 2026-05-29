@@ -5,6 +5,7 @@ import {
   Check,
   GraduationCap,
   Layers,
+  Mail,
   Minus,
   School,
   Shield,
@@ -16,9 +17,17 @@ import {
 interface LandingPageProps {
   onSignIn: () => void
   onGetStarted: () => void
-  onStudentPortal: () => void
+  onStudentSignUp: () => void
+  onStudentSignIn: () => void
   onDevBypass?: () => void
 }
+
+const NAV_ITEMS = [
+  { id: 'features', label: 'Features' },
+  { id: 'pricing', label: 'Pricing' },
+  { id: 'about', label: 'About us' },
+  { id: 'contact', label: 'Contact' },
+] as const
 
 const FEATURES = [
   {
@@ -47,9 +56,9 @@ const FEATURES = [
   },
   {
     icon: Shield,
-    title: 'Your data, your device',
+    title: 'Secure cloud sync',
     description:
-      'Hosted in the cloud with secure backups. Your roster and billing data stay under your account.',
+      'Your roster and billing data stay under your account, backed up and available anywhere.',
   },
   {
     icon: GraduationCap,
@@ -81,7 +90,6 @@ interface PricingTier {
   notIncluded?: string[]
 }
 
-/** USD ≈ 1.70 AZN (CBAR peg). Competitor refs: Teachworks ~$17/mo, TutorCruncher $30–80/mo. */
 const MARKET_BENCHMARKS = [
   { name: 'Teachworks', range: '~$17–48/mo', azn: '~29–82 ₼', note: '+ per-lesson fees' },
   { name: 'TutorCruncher', range: '$30–80/mo', azn: '~51–136 ₼', note: '+ % of revenue' },
@@ -205,7 +213,8 @@ function CompareCell({ value }: { value: string | boolean }) {
 export default function LandingPage({
   onSignIn,
   onGetStarted,
-  onStudentPortal,
+  onStudentSignUp,
+  onStudentSignIn,
   onDevBypass,
 }: LandingPageProps) {
   const scrollTo = (id: string) => {
@@ -213,11 +222,7 @@ export default function LandingPage({
   }
 
   const handleTierCta = (tier: PricingTier) => {
-    if (tier.id === 'individual') {
-      onGetStarted()
-      return
-    }
-    if (tier.id === 'organization') {
+    if (tier.id === 'individual' || tier.id === 'organization') {
       onGetStarted()
       return
     }
@@ -227,142 +232,143 @@ export default function LandingPage({
   return (
     <div className="min-h-screen bg-[#0f172a] text-white">
       <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-[#0f172a]/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 lg:px-8">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-lg shadow-blue-600/30">
               <GraduationCap className="h-5 w-5 text-white" strokeWidth={2.25} />
             </div>
             <span className="text-lg font-semibold tracking-tight">Teacher Hub</span>
           </div>
-          <nav className="hidden items-center gap-6 sm:flex">
-            <button
-              type="button"
-              onClick={() => scrollTo('features')}
-              className="text-sm font-medium text-slate-400 transition-colors hover:text-white"
-            >
-              Features
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollTo('pricing')}
-              className="text-sm font-medium text-slate-400 transition-colors hover:text-white"
-            >
-              Pricing
-            </button>
+
+          <nav className="order-3 flex w-full flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:order-none sm:w-auto sm:justify-end">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => scrollTo(item.id)}
+                className="text-sm font-medium text-slate-400 transition-colors hover:text-white"
+              >
+                {item.label}
+              </button>
+            ))}
           </nav>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={onSignIn}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white sm:px-4"
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={onGetStarted}
-              className="rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-medium text-white shadow-lg shadow-blue-600/25 transition-all hover:bg-blue-500 sm:px-4"
-            >
-              Get Started
-            </button>
-          </div>
+
+          <button
+            type="button"
+            onClick={onSignIn}
+            className="order-2 rounded-lg border border-slate-600 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800 sm:order-none"
+          >
+            Sign in
+          </button>
         </div>
       </header>
 
       <main>
-        <section className="relative overflow-hidden px-6 pb-20 pt-12 lg:px-8 lg:pt-20">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(59,130,246,0.15),_transparent_50%)]" />
+        {/* Hero — sign in / sign up first, no pricing */}
+        <section className="relative overflow-hidden px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-14">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(59,130,246,0.12),_transparent_55%)]" />
           <div className="relative mx-auto max-w-4xl text-center">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-700/80 bg-slate-800/50 px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-blue-300">
-              CRM for tutors, studios & schools
-            </p>
-            <h1 className="text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
+            <h1 className="text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl">
               Run your classes
-              <span className="mt-2 block bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">
-                without the spreadsheet chaos.
-              </span>
+              <span className="mt-2 block text-slate-300">without spreadsheet chaos</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-400">
-              Teacher Hub helps you track students, attendance, and prepaid lessons—whether
-              you teach solo, run a studio, or manage a whole school.
+            <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-slate-400 sm:text-lg">
+              Sign in or create an account. Teachers manage classes and rosters; students
+              join with a code from their teacher.
             </p>
-            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <button
-                type="button"
-                onClick={onGetStarted}
-                className="w-full rounded-xl bg-blue-600 px-8 py-3.5 text-sm font-semibold text-white shadow-xl shadow-blue-600/30 transition-all hover:bg-blue-500 hover:shadow-blue-500/40 sm:w-auto"
-              >
-                Plans from 20 ₼/month
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollTo('pricing')}
-                className="w-full rounded-xl border border-slate-600 bg-slate-800/50 px-8 py-3.5 text-sm font-semibold text-slate-200 transition-all hover:border-slate-500 hover:bg-slate-800 sm:w-auto"
-              >
-                View pricing
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={onStudentPortal}
-              className="mt-4 text-sm font-medium text-violet-300 underline-offset-4 hover:text-violet-200 hover:underline"
-            >
-              Student? Join your class →
-            </button>
-            {import.meta.env.DEV && onDevBypass && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault()
-                  onDevBypass()
-                }}
-                className="mt-6 rounded-xl border-2 border-dashed border-amber-400/60 bg-amber-500/10 px-6 py-2.5 text-sm font-semibold text-amber-200 transition-all hover:border-amber-400 hover:bg-amber-500/20"
-              >
-                ⚡ Dev Bypass: try sample data
-              </button>
-            )}
           </div>
 
-          <div className="relative mx-auto mt-16 max-w-5xl">
-            <div className="overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900/80 p-2 shadow-2xl ring-1 ring-white/10 backdrop-blur">
-              <div className="rounded-xl bg-slate-50 p-6 sm:p-8">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {[
-                    { label: 'Students', value: '24' },
-                    { label: 'Active Classes', value: '3' },
-                    { label: 'Low lesson balance', value: '2' },
-                  ].map((stat) => (
-                    <div
-                      key={stat.label}
-                      className="rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm"
-                    >
-                      <p className="text-sm text-slate-500">{stat.label}</p>
-                      <p className="mt-1 text-2xl font-semibold text-slate-900">
-                        {stat.value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+          <div className="relative mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-2 sm:gap-6">
+            <article className="flex flex-col rounded-2xl border border-blue-500/30 bg-slate-800/50 p-6 shadow-lg shadow-blue-900/10 sm:p-8">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white">
+                <GraduationCap className="h-5 w-5" strokeWidth={2} />
               </div>
-            </div>
+              <h2 className="mt-4 text-xl font-semibold text-white">I&apos;m a teacher / tutor</h2>
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-400">
+                Manage classes, attendance, lesson balances, and student join requests.
+              </p>
+              <div className="mt-6 flex flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={onGetStarted}
+                  className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-500"
+                >
+                  Create teacher account
+                </button>
+                <button
+                  type="button"
+                  onClick={onSignIn}
+                  className="w-full rounded-xl border border-slate-600 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800/80"
+                >
+                  Sign in
+                </button>
+              </div>
+            </article>
+
+            <article className="flex flex-col rounded-2xl border border-violet-500/30 bg-slate-800/50 p-6 shadow-lg shadow-violet-900/10 sm:p-8">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white">
+                <Users className="h-5 w-5" strokeWidth={2} />
+              </div>
+              <h2 className="mt-4 text-xl font-semibold text-white">I&apos;m a student</h2>
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-400">
+                Join your class with a code from your teacher after you create an account.
+              </p>
+              <div className="mt-6 flex flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={onStudentSignUp}
+                  className="w-full rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition-colors hover:bg-violet-500"
+                >
+                  Create student account
+                </button>
+                <button
+                  type="button"
+                  onClick={onStudentSignIn}
+                  className="w-full rounded-xl border border-slate-600 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800/80"
+                >
+                  Sign in
+                </button>
+              </div>
+            </article>
           </div>
+
+          <p className="relative mx-auto mt-8 max-w-lg text-center text-xs text-slate-500">
+            New here? Pick the card that matches you.{' '}
+            <button
+              type="button"
+              onClick={() => scrollTo('pricing')}
+              className="font-medium text-blue-400 underline-offset-2 hover:text-blue-300 hover:underline"
+            >
+              View pricing
+            </button>{' '}
+            when you&apos;re ready.
+          </p>
+
+          {import.meta.env.DEV && onDevBypass && (
+            <div className="relative mt-6 text-center">
+              <button
+                type="button"
+                onClick={onDevBypass}
+                className="rounded-xl border-2 border-dashed border-amber-400/60 bg-amber-500/10 px-6 py-2.5 text-sm font-semibold text-amber-200 transition-all hover:border-amber-400 hover:bg-amber-500/20"
+              >
+                Dev bypass: try sample data
+              </button>
+            </div>
+          )}
         </section>
 
         <section
           id="features"
-          className="scroll-mt-20 border-t border-slate-800 bg-slate-900/50 px-6 py-20 lg:px-8"
+          className="scroll-mt-20 border-t border-slate-800 bg-slate-900/50 px-4 py-16 sm:px-6 lg:px-8"
         >
           <div className="mx-auto max-w-6xl">
             <div className="text-center">
-              <h2 className="text-3xl font-semibold tracking-tight text-white">
-                Why teachers choose Teacher Hub
-              </h2>
+              <h2 className="text-3xl font-semibold tracking-tight text-white">Features</h2>
               <p className="mx-auto mt-3 max-w-2xl text-slate-400">
-                Less busywork, more teaching. Every plan includes the core tools you need
-                to run classes day to day.
+                Less busywork, more teaching. Core tools to run classes day to day.
               </p>
             </div>
-            <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {FEATURES.map((feature) => {
                 const Icon = feature.icon
                 return (
@@ -386,17 +392,15 @@ export default function LandingPage({
 
         <section
           id="pricing"
-          className="scroll-mt-20 border-t border-slate-800 px-6 py-20 lg:px-8"
+          className="scroll-mt-20 border-t border-slate-800 px-4 py-16 sm:px-6 lg:px-8"
         >
           <div className="mx-auto max-w-6xl">
             <div className="text-center">
               <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                Simple pricing that grows with you
+                Pricing
               </h2>
               <p className="mx-auto mt-3 max-w-2xl text-slate-400">
-                Priced below international tutoring CRMs, with no commission on your
-                lesson revenue. Pay for hosting and software that saves you hours each
-                week.
+                Flat monthly pricing in manats—no commission on what you charge students.
               </p>
             </div>
 
@@ -408,8 +412,7 @@ export default function LandingPage({
                 Tools like Teachworks and TutorCruncher charge roughly{' '}
                 <span className="text-slate-200">$17–80 USD/month</span> (about{' '}
                 <span className="text-slate-200">29–136 ₼</span>), often plus per-lesson
-                or revenue fees. Teacher Hub uses a flat monthly price in manats—no cut of
-                what you charge students.
+                or revenue fees.
               </p>
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[480px] text-left text-sm">
@@ -564,17 +567,12 @@ export default function LandingPage({
             <div className="mt-16 overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-800/30">
               <div className="border-b border-slate-700/60 px-6 py-4">
                 <h3 className="text-lg font-semibold text-white">Compare plans</h3>
-                <p className="mt-1 text-sm text-slate-400">
-                  See what&apos;s included at each level
-                </p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left">
                   <thead>
                     <tr className="border-b border-slate-700/60">
-                      <th className="px-6 py-4 text-sm font-medium text-slate-400">
-                        Feature
-                      </th>
+                      <th className="px-6 py-4 text-sm font-medium text-slate-400">Feature</th>
                       <th className="px-4 py-4 text-center text-sm font-semibold text-white">
                         Individual
                       </th>
@@ -596,7 +594,7 @@ export default function LandingPage({
                         <td className="px-4 py-3.5 text-center">
                           <CompareCell value={row.individual} />
                         </td>
-                        <td className="px-4 py-3.5 text-center bg-blue-600/5">
+                        <td className="bg-blue-600/5 px-4 py-3.5 text-center">
                           <CompareCell value={row.organization} />
                         </td>
                         <td className="px-4 py-3.5 text-center">
@@ -610,43 +608,101 @@ export default function LandingPage({
             </div>
 
             <p className="mt-8 text-center text-sm text-slate-500">
-              All plans include a 14-day trial. Prices in Azerbaijani manat (₼); USD
-              equivalents use the official ~1.70 ₼/USD rate. No commission on lesson
-              payments you collect from families.
+              14-day trial on paid plans. Prices in Azerbaijani manat (₼).
             </p>
           </div>
         </section>
 
-        <section className="px-6 py-16 lg:px-8">
-          <div className="mx-auto max-w-3xl rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-12 text-center shadow-xl">
-            <h2 className="text-2xl font-semibold text-white sm:text-3xl">
-              Ready to replace your classroom spreadsheets?
-            </h2>
-            <p className="mt-3 text-blue-100">
-              Try free for 14 days, then from 20 ₼/month when billed annually.
+        <section
+          id="about"
+          className="scroll-mt-20 border-t border-slate-800 bg-slate-900/50 px-4 py-16 sm:px-6 lg:px-8"
+        >
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-3xl font-semibold tracking-tight text-white">About us</h2>
+            <p className="mt-6 text-left text-base leading-relaxed text-slate-400 sm:text-center">
+              Teacher Hub is built for educators who run classes—not enterprise IT
+              departments. We focus on rosters, attendance, prepaid lessons, and a simple
+              student portal so tutors, studios, and schools can spend less time in
+              spreadsheets and more time teaching.
             </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <p className="mt-4 text-left text-base leading-relaxed text-slate-400 sm:text-center">
+              Whether you teach on your own or coordinate a small team, the same tools
+              help you stay organized. Larger organization and school features are on our
+              roadmap as we grow with your feedback.
+            </p>
+          </div>
+        </section>
+
+        <section
+          id="contact"
+          className="scroll-mt-20 border-t border-slate-800 px-4 py-16 sm:px-6 lg:px-8"
+        >
+          <div className="mx-auto max-w-xl text-center">
+            <h2 className="text-3xl font-semibold tracking-tight text-white">Contact</h2>
+            <p className="mt-4 text-slate-400">
+              Questions about plans, schools, or partnerships? We&apos;d love to hear from you.
+            </p>
+            <a
+              href="mailto:hello@teacherhub.app"
+              className="mt-8 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800 px-6 py-3.5 text-sm font-semibold text-white ring-1 ring-slate-600 transition-colors hover:bg-slate-700"
+            >
+              <Mail className="h-4 w-4" strokeWidth={2} />
+              hello@teacherhub.app
+            </a>
+            <p className="mt-4 text-sm text-slate-500">
+              Schools plan:{' '}
+              <a
+                href="mailto:sales@teacherhub.app"
+                className="text-blue-400 hover:text-blue-300"
+              >
+                sales@teacherhub.app
+              </a>
+            </p>
+          </div>
+        </section>
+
+        <section className="border-t border-slate-800 px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-10 text-center shadow-xl sm:px-8">
+            <h2 className="text-xl font-semibold text-white sm:text-2xl">
+              Ready to get started?
+            </h2>
+            <p className="mt-2 text-sm text-blue-100">
+              Create a free teacher account or sign in to your existing one.
+            </p>
+            <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={onGetStarted}
                 className="w-full rounded-xl bg-white px-8 py-3 text-sm font-semibold text-blue-700 shadow-lg transition-transform hover:scale-[1.02] sm:w-auto"
               >
-                Start your 14-day trial
+                Create teacher account
               </button>
               <button
                 type="button"
-                onClick={() => scrollTo('pricing')}
+                onClick={onSignIn}
                 className="w-full rounded-xl border border-white/30 px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10 sm:w-auto"
               >
-                Compare plans
+                Sign in
               </button>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-slate-800 px-6 py-8 text-center text-sm text-slate-500 lg:px-8">
-        © {new Date().getFullYear()} Teacher Hub. Built for educators.
+      <footer className="border-t border-slate-800 px-4 py-8 text-center text-sm text-slate-500 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-2">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => scrollTo(item.id)}
+              className="transition-colors hover:text-slate-300"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-4">© {new Date().getFullYear()} Teacher Hub. Built for educators.</p>
       </footer>
     </div>
   )
