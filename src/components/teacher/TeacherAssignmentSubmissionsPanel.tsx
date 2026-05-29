@@ -1,5 +1,6 @@
-import { ExternalLink, Loader2, X } from 'lucide-react'
+import { ExternalLink, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LoadingRow, LoadingSpinner } from '../ui/Loading'
 import {
   fetchSubmissionsForAssignment,
   openSubmissionFileInNewTab,
@@ -238,10 +239,7 @@ export default function TeacherAssignmentSubmissionsPanel({
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
           <div className="max-h-52 overflow-y-auto border-b border-slate-100 sm:max-h-none sm:w-60 sm:border-b-0 sm:border-r">
             {loading ? (
-              <p className="flex items-center gap-2 p-4 text-sm text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading students…
-              </p>
+              <LoadingRow message="Loading submissions…" variant="teacher" />
             ) : enrolled.length === 0 ? (
               <p className="p-4 text-sm text-slate-500">No students in this class.</p>
             ) : (
@@ -346,7 +344,7 @@ export default function TeacherAssignmentSubmissionsPanel({
                             className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-[#185560] ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
                           >
                             {openingFile === f.storagePath ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <LoadingSpinner size="sm" variant="teacher" />
                             ) : (
                               <ExternalLink className="h-3.5 w-3.5" />
                             )}

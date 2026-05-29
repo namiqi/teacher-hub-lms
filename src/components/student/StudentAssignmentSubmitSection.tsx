@@ -1,5 +1,6 @@
-import { ExternalLink, Loader2, Upload } from 'lucide-react'
+import { ExternalLink, Upload } from 'lucide-react'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { LoadingSpinner, LoadingState } from '../ui/Loading'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import {
   fetchMySubmission,
@@ -130,10 +131,12 @@ export default function StudentAssignmentSubmitSection({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading your submission…
-      </div>
+      <LoadingState
+        message="Loading your submission…"
+        variant="student"
+        minHeight="min-h-[6rem]"
+        className="border-t border-slate-100 pt-4"
+      />
     )
   }
 
@@ -190,7 +193,7 @@ export default function StudentAssignmentSubmitSection({
                     className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:underline disabled:opacity-50"
                   >
                     {openingFile === f.storagePath ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <LoadingSpinner size="sm" variant="student" />
                     ) : (
                       <ExternalLink className="h-3.5 w-3.5" />
                     )}
@@ -264,7 +267,7 @@ export default function StudentAssignmentSubmitSection({
             className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 sm:w-auto"
           >
             {submitting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <LoadingSpinner size="sm" variant="student" label="Submitting" />
             ) : (
               <Upload className="h-4 w-4" />
             )}

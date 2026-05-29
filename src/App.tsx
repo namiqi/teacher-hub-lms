@@ -6,6 +6,7 @@ import StudentLoginView from './components/auth/StudentLoginView'
 import StudentSignupView from './components/auth/StudentSignupView'
 import StudentPortal from './components/student/StudentPortal'
 import Header from './components/Header'
+import { LoadingScreen } from './components/ui/Loading'
 import CreateClassModal from './components/modals/CreateClassModal'
 import ManageClassModal from './components/modals/ManageClassModal'
 import { generateUniqueClassKey } from './lib/classKeys'
@@ -1308,8 +1309,8 @@ function App() {
     return (
       <div className="flex min-h-screen flex-col bg-slate-50">
         {demoModeBanner}
-        <div className="flex flex-1 items-center justify-center text-sm text-slate-600">
-          Loading…
+        <div className="flex flex-1 flex-col">
+          <LoadingScreen message="Signing you in…" />
         </div>
       </div>
     )

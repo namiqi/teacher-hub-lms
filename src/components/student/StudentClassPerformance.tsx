@@ -1,5 +1,6 @@
-import { CalendarCheck, ChevronRight, ClipboardList, Loader2 } from 'lucide-react'
+import { CalendarCheck, ChevronRight, ClipboardList } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LoadingState } from '../ui/Loading'
 import { formatAssignmentDue } from '../../lib/assignments'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import { fetchMySubmissionsForClass } from '../../lib/supabase/submissions'
@@ -137,10 +138,12 @@ export default function StudentClassPerformance({
             Online grades appear when you sign in on the hosted app with Supabase.
           </p>
         ) : loadingGrades ? (
-          <p className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading grades…
-          </p>
+          <LoadingState
+            message="Loading your grades…"
+            variant="student"
+            inset
+            minHeight="min-h-[10rem]"
+          />
         ) : gradesError ? (
           <p className="px-4 py-8 text-center text-sm text-rose-600 sm:px-5">{gradesError}</p>
         ) : gradeRows.length === 0 ? (
