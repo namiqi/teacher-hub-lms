@@ -7,12 +7,11 @@ import {
 } from '../../lib/joinRequests'
 import { formatJoinCodeForDisplay } from '../../lib/joinCodes'
 import { loadClasses } from '../../lib/storage'
-import type { Class, JoinRequest, Student, StudentAccount } from '../../types'
+import type { JoinRequest, Student, StudentAccount } from '../../types'
 
 interface JoinClassModalProps {
   isOpen: boolean
   account: StudentAccount
-  classes: Class[]
   students: Student[]
   joinRequests: JoinRequest[]
   onClose: () => void
@@ -22,7 +21,6 @@ interface JoinClassModalProps {
 export default function JoinClassModal({
   isOpen,
   account,
-  classes,
   students,
   joinRequests,
   onClose,

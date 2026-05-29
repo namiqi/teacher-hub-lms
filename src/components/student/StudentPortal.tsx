@@ -217,7 +217,6 @@ export default function StudentPortal({
       <JoinClassModal
         isOpen={joinOpen}
         account={account}
-        classes={classes}
         students={students}
         joinRequests={joinRequests}
         onClose={() => setJoinOpen(false)}

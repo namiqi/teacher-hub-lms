@@ -1,6 +1,5 @@
 import { LayoutDashboard, UserPlus } from 'lucide-react'
 import type { StudentTabId } from '../../types'
-import { STUDENT_TAB_LABELS } from '../../types'
 
 const MOBILE_TABS: {
   id: StudentTabId
