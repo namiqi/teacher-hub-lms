@@ -17,7 +17,7 @@ interface LandingPageProps {
   onSignIn: () => void
   onGetStarted: () => void
   onStudentPortal: () => void
-  onDevBypass: () => void
+  onDevBypass?: () => void
 }
 
 const FEATURES = [
@@ -309,16 +309,18 @@ export default function LandingPage({
             >
               Student? Join your class →
             </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                onDevBypass()
-              }}
-              className="mt-6 rounded-xl border-2 border-dashed border-amber-400/60 bg-amber-500/10 px-6 py-2.5 text-sm font-semibold text-amber-200 transition-all hover:border-amber-400 hover:bg-amber-500/20"
-            >
-              ⚡ Dev Bypass: try sample data
-            </button>
+            {import.meta.env.DEV && onDevBypass && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  onDevBypass()
+                }}
+                className="mt-6 rounded-xl border-2 border-dashed border-amber-400/60 bg-amber-500/10 px-6 py-2.5 text-sm font-semibold text-amber-200 transition-all hover:border-amber-400 hover:bg-amber-500/20"
+              >
+                ⚡ Dev Bypass: try sample data
+              </button>
+            )}
           </div>
 
           <div className="relative mx-auto mt-16 max-w-5xl">

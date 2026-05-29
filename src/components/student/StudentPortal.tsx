@@ -28,8 +28,9 @@ interface StudentPortalProps {
   assignments: Assignment[]
   payments: PaymentRecord[]
   attendance: AttendanceLedger
+  studentUserId?: string | null
   onSignOut: () => void
-  onSubmitJoinRequest: (request: JoinRequest) => void
+  onSubmitJoinRequest: (request: JoinRequest) => void | Promise<void>
 }
 
 export default function StudentPortal({
@@ -40,6 +41,7 @@ export default function StudentPortal({
   assignments,
   payments,
   attendance,
+  studentUserId,
   onSignOut,
   onSubmitJoinRequest,
 }: StudentPortalProps) {
@@ -219,6 +221,7 @@ export default function StudentPortal({
         account={account}
         students={students}
         joinRequests={joinRequests}
+        studentUserId={studentUserId}
         onClose={() => setJoinOpen(false)}
         onSubmit={onSubmitJoinRequest}
       />

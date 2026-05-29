@@ -1,35 +1,46 @@
 import { GraduationCap } from 'lucide-react'
 import { useState } from 'react'
-import { findStudentAccountByEmail } from '../../lib/storage'
 
 interface StudentLoginViewProps {
-  onSignIn: (accountId: number) => void
+  onSignIn: (email: string, password: string) => Promise<void>
+  onGoogleSignIn: () => Promise<void>
   onGoToSignup: () => void
   onBack: () => void
 }
 
 export default function StudentLoginView({
   onSignIn,
+  onGoogleSignIn,
   onGoToSignup,
   onBack,
 }: StudentLoginViewProps) {
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setIsSubmitting(true)
-    const account = findStudentAccountByEmail(email)
-    window.setTimeout(() => {
+    try {
+      await onSignIn(email, password)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign in failed.')
+    } finally {
       setIsSubmitting(false)
-      if (!account) {
-        setError('No student account found for this email. Sign up first.')
-        return
-      }
-      onSignIn(account.id)
-    }, 300)
+    }
+  }
+
+  const handleGoogle = async () => {
+    setError(null)
+    setIsSubmitting(true)
+    try {
+      await onGoogleSignIn()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign in failed.')
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -49,7 +60,7 @@ export default function StudentLoginView({
             </div>
             <h1 className="mt-4 text-2xl font-semibold text-slate-900">Student sign in</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Use the email you registered with (demo — no password yet)
+              Sign in with email and password
             </p>
           </div>
           <form className="space-y-5" onSubmit={handleSubmit}>
@@ -60,6 +71,16 @@ export default function StudentLoginView({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Password</span>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
               />
             </label>
@@ -76,6 +97,16 @@ export default function StudentLoginView({
               {isSubmitting ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
+
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={handleGoogle}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-70"
+          >
+            Continue with Google
+          </button>
+
           <p className="mt-6 text-center text-sm text-slate-500">
             New here?{' '}
             <button

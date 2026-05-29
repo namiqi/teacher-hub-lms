@@ -82,11 +82,14 @@ export function createJoinRequest(
   account: StudentAccount,
   cls: Class,
   requestedName: string,
+  meta?: { studentUserId?: string; teacherId?: string },
 ): JoinRequest {
   return {
     id: `join-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     classKey: cls.classKey,
     studentAccountId: account.id,
+    studentUserId: meta?.studentUserId,
+    teacherId: meta?.teacherId,
     requestedName: requestedName.trim(),
     status: 'pending',
     createdAt: new Date().toISOString(),

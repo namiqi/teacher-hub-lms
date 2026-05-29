@@ -105,6 +105,10 @@ export interface JoinRequest {
   status: JoinRequestStatus
   createdAt: string
   reviewedAt?: string
+  /** Set when using Supabase (auth user id of student). */
+  studentUserId?: string
+  /** Owning teacher — set when using Supabase. */
+  teacherId?: string
 }
 
 export interface StudentAccount {

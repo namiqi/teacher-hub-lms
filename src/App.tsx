@@ -62,6 +62,7 @@ import {
   loadUser,
   parseAppBackup,
   persistAppBackup,
+  findStudentAccountByEmail,
   registerStudentAccount,
   saveAttendance,
   saveClasses,
@@ -77,6 +78,29 @@ import {
 } from './lib/storage'
 import { studentEmailFromName } from './lib/utils'
 import { initializeEmptyWorkspace, seedDemoWorkspace } from './lib/workspace'
+import type { User as SupabaseAuthUser } from '@supabase/supabase-js'
+import { routeAuthenticatedUser } from './lib/supabase/appAuth'
+import {
+  ensureActiveSession,
+  getSession,
+  onAuthStateChange,
+  signInWithEmail,
+  signInWithGoogle,
+  signOutSupabase,
+  signUpWithEmail,
+} from './lib/supabase/auth'
+import { isSupabaseConfigured } from './lib/supabase/client'
+import { flushTeacherWorkspaceSave, scheduleTeacherWorkspaceSave } from './lib/supabase/persist'
+import { resolveStudentSession } from './lib/supabase/sessionBridge'
+import { insertJoinRequestRemote } from './lib/supabase/studentData'
+import {
+  fetchTeacherWorkspace,
+  insertStudentEnrollment,
+  type TeacherCloudState,
+  type TeacherWorkspaceData,
+  updateJoinRequestStatus,
+  updateStudentProfileLink,
+} from './lib/supabase/teacherData'
 import type {
   AppView,
   AttendanceLedger,
@@ -97,6 +121,7 @@ import type {
 } from './types'
 
 function getInitialView(): AppView {
+  if (isSupabaseConfigured()) return 'landing'
   const role = loadSessionRole()
   if (role === 'student') return 'student-portal'
   if (role === 'teacher') return 'dashboard'
@@ -112,6 +137,10 @@ const DEFAULT_USER: User = {
 }
 
 function App() {
+  const useCloud = isSupabaseConfigured()
+  const [authReady, setAuthReady] = useState(() => !useCloud)
+  const [teacherUserId, setTeacherUserId] = useState<string | null>(null)
+  const [studentUserId, setStudentUserId] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState<AppView>(getInitialView)
   const [user, setUser] = useState<User>(() => loadUser() ?? DEFAULT_USER)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
@@ -190,7 +219,138 @@ function App() {
     saveAssignments(assignments)
   }, [assignments])
 
+  const applyTeacherCloud = useCallback(
+    (teacherId: string, state: TeacherCloudState, nextUser: User) => {
+      setTeacherUserId(teacherId)
+      setStudentUserId(null)
+      setUser(nextUser)
+      setClasses(state.classes)
+      setStudents(state.students)
+      setAttendance(state.attendance)
+      setPayments(state.payments)
+      setAssignments(state.assignments)
+      setJoinRequests(state.joinRequests)
+      setAttendanceClassKey(
+        state.classes.find((c) => c.status === 'active')?.classKey ??
+          state.classes[0]?.classKey ??
+          '',
+      )
+      shouldPersistClasses.current = false
+      shouldPersistStudents.current = false
+      shouldPersistAttendance.current = false
+      shouldPersistPayments.current = false
+      shouldPersistJoinRequests.current = false
+      shouldPersistAssignments.current = false
+    },
+    [],
+  )
+
+  const applyStudentCloud = useCallback(
+    (
+      studentId: string,
+      account: StudentAccount,
+      portal: Awaited<ReturnType<typeof resolveStudentSession>>['portal'],
+    ) => {
+      setStudentUserId(studentId)
+      setTeacherUserId(null)
+      setStudentAccount(account)
+      saveStudentSession(account)
+      setClasses(portal.classes)
+      setStudents(portal.students)
+      setJoinRequests(portal.joinRequests)
+      setAssignments(portal.assignments)
+      setPayments(portal.payments)
+      setAttendance(portal.attendance)
+    },
+    [],
+  )
+
+  const routeSession = useCallback(async (authUser?: SupabaseAuthUser) => {
+    let user = authUser
+    if (!user) {
+      const session = await getSession()
+      user = session?.user ?? undefined
+    }
+    if (!user) {
+      throw new Error('No active session. Try signing in.')
+    }
+    const routed = await routeAuthenticatedUser(user)
+    if (routed.role === 'teacher') {
+      const { user, teacherId, state } = routed.payload
+      applyTeacherCloud(teacherId, state, user)
+      saveTeacherSession()
+      setCurrentView('dashboard')
+      return
+    }
+    const { account, studentId, portal } = routed.payload
+    applyStudentCloud(studentId, account, portal)
+    setCurrentView('student-portal')
+  }, [applyTeacherCloud, applyStudentCloud])
+
   useEffect(() => {
+    if (!useCloud) return
+
+    let cancelled = false
+
+    async function init() {
+      try {
+        await routeSession()
+      } catch (err) {
+        console.error('[Teacher Hub] Auth bootstrap failed', err)
+      } finally {
+        if (!cancelled) setAuthReady(true)
+      }
+    }
+
+    void init()
+
+    const unsub = onAuthStateChange((session) => {
+      if (!session?.user) {
+        setTeacherUserId(null)
+        setStudentUserId(null)
+        return
+      }
+      void routeSession().catch((err) => {
+        console.error('[Teacher Hub] Auth state sync failed', err)
+      })
+    })
+
+    return () => {
+      cancelled = true
+      unsub()
+    }
+  }, [useCloud, routeSession])
+
+  useEffect(() => {
+    if (!useCloud || !teacherUserId) return
+    const shouldSave =
+      shouldPersistClasses.current ||
+      shouldPersistStudents.current ||
+      shouldPersistAttendance.current ||
+      shouldPersistPayments.current ||
+      shouldPersistAssignments.current
+    if (!shouldSave) return
+
+    const payload: TeacherWorkspaceData = {
+      classes,
+      students,
+      attendance,
+      payments,
+      assignments,
+    }
+    scheduleTeacherWorkspaceSave(teacherUserId, payload)
+  }, [
+    useCloud,
+    teacherUserId,
+    classes,
+    students,
+    attendance,
+    payments,
+    assignments,
+  ])
+
+  useEffect(() => {
+    if (useCloud) return
     if (
       currentView === 'student-portal' ||
       currentView === 'student-login' ||
@@ -198,11 +358,30 @@ function App() {
     ) {
       setClasses(loadClasses())
     }
-  }, [currentView])
+  }, [currentView, useCloud])
 
-  const refreshJoinRequests = useCallback(() => {
+  const refreshJoinRequests = useCallback(async () => {
+    if (useCloud && teacherUserId) {
+      try {
+        const state = await fetchTeacherWorkspace(teacherUserId)
+        setJoinRequests(state.joinRequests)
+      } catch (err) {
+        console.error('[Teacher Hub] Failed to refresh join requests', err)
+      }
+      return
+    }
     setJoinRequests(loadJoinRequests())
-  }, [])
+  }, [useCloud, teacherUserId])
+
+  const refreshStudentPortal = useCallback(async () => {
+    if (!useCloud || !studentUserId) return
+    try {
+      const { account, portal } = await resolveStudentSession(studentUserId)
+      applyStudentCloud(studentUserId, account, portal)
+    } catch (err) {
+      console.error('[Teacher Hub] Failed to refresh student portal', err)
+    }
+  }, [useCloud, studentUserId, applyStudentCloud])
 
   const refreshAssignments = useCallback(() => {
     setAssignments(loadAssignments(classes))
@@ -217,8 +396,9 @@ function App() {
   useEffect(() => {
     if (currentView !== 'dashboard' && currentView !== 'student-portal') return
     const onSync = () => {
-      refreshJoinRequests()
+      void refreshJoinRequests()
       refreshAssignments()
+      if (currentView === 'student-portal') void refreshStudentPortal()
     }
     const onVisible = () => {
       if (document.visibilityState === 'visible') onSync()
@@ -229,7 +409,7 @@ function App() {
       window.removeEventListener('focus', onSync)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [currentView, refreshJoinRequests, refreshAssignments])
+  }, [currentView, refreshJoinRequests, refreshAssignments, refreshStudentPortal])
 
   const markPersistStudents = () => {
     shouldPersistStudents.current = true
@@ -271,14 +451,66 @@ function App() {
     setCurrentView('dashboard')
   }, [])
 
-  const handleSignOut = useCallback(() => {
+  const handleSignOut = useCallback(async () => {
+    if (useCloud) {
+      await flushTeacherWorkspaceSave()
+      await signOutSupabase()
+    }
     clearSession()
+    setTeacherUserId(null)
+    setStudentUserId(null)
+    setStudentAccount(null)
     setCurrentView('landing')
     setActiveTab('overview')
-  }, [])
+  }, [useCloud])
+
+  const handleTeacherSignIn = useCallback(
+    async (email: string, password: string) => {
+      if (useCloud) {
+        const { error } = await signInWithEmail(email, password)
+        if (error) throw new Error(error)
+        await routeSession()
+        return
+      }
+      enterDashboard({
+        ...DEFAULT_USER,
+        email: email.trim(),
+      })
+    },
+    [useCloud, enterDashboard, routeSession],
+  )
+
+  const handleTeacherGoogleSignIn = useCallback(async () => {
+    if (!useCloud) {
+      throw new Error('Google sign-in requires Supabase. Add keys to your .env file.')
+    }
+    const { error } = await signInWithGoogle('teacher')
+    if (error) throw new Error(error)
+  }, [useCloud])
+
+  const handleTeacherGoogleSignUp = handleTeacherGoogleSignIn
 
   const handleSignUp = useCallback(
-    (name: string, email: string) => {
+    async (name: string, email: string, password: string) => {
+      if (useCloud) {
+        const { user, session, error } = await signUpWithEmail(
+          email,
+          password,
+          name,
+          'teacher',
+        )
+        if (error) throw new Error(error)
+        if (!user) {
+          throw new Error('Check your email to confirm your account, then sign in.')
+        }
+        if (!session) {
+          await ensureActiveSession(email, password)
+        }
+        await routeSession(user)
+        setActiveTab('overview')
+        return
+      }
+
       const nextUser: User = {
         name,
         email,
@@ -300,7 +532,7 @@ function App() {
       enterDashboard(nextUser)
       setActiveTab('overview')
     },
-    [enterDashboard],
+    [useCloud, enterDashboard, routeSession],
   )
 
   const handleCreateClass = useCallback((input: CreateClassInput) => {
@@ -794,15 +1026,27 @@ function App() {
   }, [])
 
   const handleApproveJoinRequest = useCallback(
-    (requestId: string) => {
+    async (requestId: string) => {
       const request = joinRequests.find((r) => r.id === requestId)
       if (!request || request.status !== 'pending') return
+
+      const fallbackAccount: StudentAccount = {
+        id: request.studentAccountId,
+        email: studentEmailFromName(request.requestedName),
+        displayName: request.requestedName,
+        initials: getInitials(request.requestedName),
+      }
+      const accountsForApprove = studentAccounts.some(
+        (a) => a.id === request.studentAccountId,
+      )
+        ? studentAccounts
+        : [...studentAccounts, fallbackAccount]
 
       const result = approveJoinRequest(
         request,
         students,
         classes,
-        studentAccounts,
+        accountsForApprove,
       )
       const linkedId = result.accounts.find(
         (a) => a.id === request.studentAccountId,
@@ -837,63 +1081,153 @@ function App() {
         markPersistAttendance()
       }
 
-      saveStudentAccounts(result.accounts)
+      if (!useCloud) {
+        saveStudentAccounts(result.accounts)
+      }
       setStudentAccounts(result.accounts)
       setJoinRequests((prev) =>
         prev.map((r) => (r.id === requestId ? result.request : r)),
       )
-      shouldPersistJoinRequests.current = true
+      shouldPersistJoinRequests.current = !useCloud
+
+      if (useCloud && teacherUserId && request.studentUserId && linkedId) {
+        try {
+          await updateJoinRequestStatus(
+            requestId,
+            'approved',
+            result.request.reviewedAt,
+          )
+          await insertStudentEnrollment(
+            request.studentUserId,
+            teacherUserId,
+            request.classKey,
+            linkedId,
+          )
+          await updateStudentProfileLink(
+            request.studentUserId,
+            linkedId,
+            teacherUserId,
+          )
+        } catch (err) {
+          console.error('[Teacher Hub] Failed to sync join approval', err)
+        }
+      }
     },
-    [joinRequests, students, classes, studentAccounts],
+    [joinRequests, students, classes, studentAccounts, useCloud, teacherUserId],
   )
 
-  const handleRejectJoinRequest = useCallback((requestId: string) => {
-    setJoinRequests((prev) =>
-      prev.map((r) =>
-        r.id === requestId
-          ? {
-              ...r,
-              status: 'rejected' as const,
-              reviewedAt: new Date().toISOString(),
-            }
-          : r,
-      ),
-    )
-    shouldPersistJoinRequests.current = true
-    logger.info('Join request rejected', { requestId })
-  }, [])
+  const handleRejectJoinRequest = useCallback(
+    async (requestId: string) => {
+      const reviewedAt = new Date().toISOString()
+      setJoinRequests((prev) =>
+        prev.map((r) =>
+          r.id === requestId
+            ? {
+                ...r,
+                status: 'rejected' as const,
+                reviewedAt,
+              }
+            : r,
+        ),
+      )
+      if (useCloud) {
+        try {
+          await updateJoinRequestStatus(requestId, 'rejected', reviewedAt)
+        } catch (err) {
+          console.error('[Teacher Hub] Failed to reject join request', err)
+        }
+      } else {
+        shouldPersistJoinRequests.current = true
+      }
+      logger.info('Join request rejected', { requestId })
+    },
+    [useCloud],
+  )
 
-  const handleStudentSubmitJoin = useCallback((request: JoinRequest) => {
-    setJoinRequests((prev) => [...prev, request])
-    shouldPersistJoinRequests.current = true
-    logger.info('Join request submitted', { classKey: request.classKey })
-  }, [])
+  const handleStudentSubmitJoin = useCallback(
+    async (request: JoinRequest) => {
+      if (useCloud) {
+        await insertJoinRequestRemote(request)
+      } else {
+        shouldPersistJoinRequests.current = true
+      }
+      setJoinRequests((prev) => [...prev, request])
+      logger.info('Join request submitted', { classKey: request.classKey })
+    },
+    [useCloud],
+  )
 
-  const handleStudentSignUp = useCallback((displayName: string, email: string) => {
-    try {
+  const handleStudentSignUp = useCallback(
+    async (displayName: string, email: string, password: string) => {
+      if (useCloud) {
+        const { user, session, error } = await signUpWithEmail(
+          email,
+          password,
+          displayName,
+          'student',
+        )
+        if (error) throw new Error(error)
+        if (!user) {
+          throw new Error('Check your email to confirm your account, then sign in.')
+        }
+        if (!session) {
+          await ensureActiveSession(email, password)
+        }
+        await routeSession(user)
+        return
+      }
+
       const account = registerStudentAccount(displayName, email)
       saveStudentSession(account)
       setStudentAccount(account)
       setStudentAccounts(loadStudentAccounts())
+      setClasses(loadClasses())
+      setJoinRequests(loadJoinRequests())
       setCurrentView('student-portal')
-    } catch (err) {
-      throw err
+    },
+    [useCloud, routeSession],
+  )
+
+  const handleStudentSignIn = useCallback(
+    async (email: string, password: string) => {
+      if (useCloud) {
+        const { error } = await signInWithEmail(email, password)
+        if (error) throw new Error(error)
+        await routeSession()
+        return
+      }
+
+      const account = findStudentAccountByEmail(email)
+      if (!account) {
+        throw new Error('No account found for this email. Create an account first.')
+      }
+      saveStudentSession(account)
+      setStudentAccount(account)
+      setClasses(loadClasses())
+      setJoinRequests(loadJoinRequests())
+      setAssignments(loadAssignments(loadClasses()))
+      setCurrentView('student-portal')
+    },
+    [useCloud, routeSession],
+  )
+
+  const handleStudentGoogleAuth = useCallback(async () => {
+    if (!useCloud) {
+      throw new Error('Google sign-in requires Supabase. Add keys to your .env file.')
     }
-  }, [])
+    const { error } = await signInWithGoogle('student')
+    if (error) throw new Error(error)
+  }, [useCloud])
 
-  const handleStudentSignIn = useCallback((accountId: number) => {
-    const account = loadStudentAccounts().find((a) => a.id === accountId)
-    if (!account) return
-    saveStudentSession(account)
-    setStudentAccount(account)
-    setCurrentView('student-portal')
-  }, [])
-
-  const handleStudentSignOut = useCallback(() => {
+  const handleStudentSignOut = useCallback(async () => {
+    if (useCloud) {
+      await signOutSupabase()
+    }
     clearSession()
     setStudentAccount(null)
+    setStudentUserId(null)
     setCurrentView('landing')
-  }, [])
+  }, [useCloud])
 
   const handleDeleteStudent = useCallback((studentId: number) => {
     setStudents((prev) => {
@@ -914,14 +1248,41 @@ function App() {
     markPersistAttendance()
   }, [])
 
+  const demoModeBanner =
+    import.meta.env.PROD && !useCloud ? (
+      <div
+        className="border-b border-amber-300 bg-amber-100 px-4 py-2.5 text-center text-sm font-medium text-amber-950"
+        role="status"
+      >
+        Demo mode — accounts are stored in this browser only, not Supabase. Add{' '}
+        <code className="rounded bg-amber-200/80 px-1">VITE_SUPABASE_URL</code> and{' '}
+        <code className="rounded bg-amber-200/80 px-1">VITE_SUPABASE_ANON_KEY</code> on
+        Netlify, then redeploy.
+      </div>
+    ) : null
+
+  if (useCloud && !authReady) {
+    return (
+      <div className="flex min-h-screen flex-col bg-slate-50">
+        {demoModeBanner}
+        <div className="flex flex-1 items-center justify-center text-sm text-slate-600">
+          Loading…
+        </div>
+      </div>
+    )
+  }
+
   if (currentView === 'landing') {
     return (
-      <LandingPage
-        onSignIn={() => setCurrentView('login')}
-        onGetStarted={() => setCurrentView('signup')}
-        onStudentPortal={() => setCurrentView('student-login')}
-        onDevBypass={handleDevBypass}
-      />
+      <>
+        {demoModeBanner}
+        <LandingPage
+          onSignIn={() => setCurrentView('login')}
+          onGetStarted={() => setCurrentView('signup')}
+          onStudentPortal={() => setCurrentView('student-login')}
+          onDevBypass={useCloud ? undefined : handleDevBypass}
+        />
+      </>
     )
   }
 
@@ -929,6 +1290,7 @@ function App() {
     return (
       <StudentLoginView
         onSignIn={handleStudentSignIn}
+        onGoogleSignIn={handleStudentGoogleAuth}
         onGoToSignup={() => setCurrentView('student-signup')}
         onBack={() => setCurrentView('landing')}
       />
@@ -939,6 +1301,7 @@ function App() {
     return (
       <StudentSignupView
         onSignUp={handleStudentSignUp}
+        onGoogleSignUp={handleStudentGoogleAuth}
         onGoToLogin={() => setCurrentView('student-login')}
         onBack={() => setCurrentView('landing')}
       />
@@ -950,6 +1313,7 @@ function App() {
       return (
         <StudentLoginView
           onSignIn={handleStudentSignIn}
+          onGoogleSignIn={handleStudentGoogleAuth}
           onGoToSignup={() => setCurrentView('student-signup')}
           onBack={() => setCurrentView('landing')}
         />
@@ -964,6 +1328,7 @@ function App() {
         assignments={assignments}
         payments={payments}
         attendance={attendance}
+        studentUserId={studentUserId}
         onSignOut={handleStudentSignOut}
         onSubmitJoinRequest={handleStudentSubmitJoin}
       />
@@ -973,15 +1338,11 @@ function App() {
   if (currentView === 'login') {
     return (
       <LoginView
-        onSignIn={() =>
-          enterDashboard({
-            ...DEFAULT_USER,
-            email: 'teacher@thehub.edu',
-          })
-        }
+        onSignIn={handleTeacherSignIn}
+        onGoogleSignIn={handleTeacherGoogleSignIn}
         onGoToSignup={() => setCurrentView('signup')}
         onBack={() => setCurrentView('landing')}
-        onDevBypass={handleDevBypass}
+        onDevBypass={useCloud ? undefined : handleDevBypass}
       />
     )
   }
@@ -990,6 +1351,7 @@ function App() {
     return (
       <SignupView
         onSignUp={handleSignUp}
+        onGoogleSignUp={handleTeacherGoogleSignUp}
         onGoToLogin={() => setCurrentView('login')}
         onBack={() => setCurrentView('landing')}
       />

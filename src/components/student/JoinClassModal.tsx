@@ -6,6 +6,11 @@ import {
   findClassByJoinCode,
 } from '../../lib/joinRequests'
 import { formatJoinCodeForDisplay } from '../../lib/joinCodes'
+import { isSupabaseConfigured } from '../../lib/supabase/client'
+import {
+  canSubmitJoinRequestRemote,
+  findClassByJoinCodeRemote,
+} from '../../lib/supabase/studentData'
 import { loadClasses } from '../../lib/storage'
 import type { JoinRequest, Student, StudentAccount } from '../../types'
 
@@ -14,8 +19,9 @@ interface JoinClassModalProps {
   account: StudentAccount
   students: Student[]
   joinRequests: JoinRequest[]
+  studentUserId?: string | null
   onClose: () => void
-  onSubmit: (request: JoinRequest) => void
+  onSubmit: (request: JoinRequest) => void | Promise<void>
 }
 
 export default function JoinClassModal({
@@ -23,12 +29,15 @@ export default function JoinClassModal({
   account,
   students,
   joinRequests,
+  studentUserId,
   onClose,
   onSubmit,
 }: JoinClassModalProps) {
   const [code, setCode] = useState('')
   const [displayName, setDisplayName] = useState(account.displayName)
   const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const useCloud = isSupabaseConfigured()
 
   useEffect(() => {
     if (!isOpen) return
@@ -43,28 +52,62 @@ export default function JoinClassModal({
 
   if (!isOpen) return null
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    const freshClasses = loadClasses()
-    const cls = findClassByJoinCode(freshClasses, code)
-    if (!cls) {
-      const hasActiveClasses = freshClasses.some((c) => c.status === 'active')
-      setError(
-        hasActiveClasses
-          ? 'Invalid class code. Copy it again from Manage class (with or without the dash).'
-          : 'No classes found in this browser. Teacher and student must use the same browser profile (not incognito vs normal).',
-      )
-      return
+    setIsSubmitting(true)
+
+    try {
+      if (useCloud && studentUserId) {
+        const found = await findClassByJoinCodeRemote(code)
+        if (!found) {
+          setError(
+            'Invalid class code. Ask your teacher for the code from Manage class.',
+          )
+          return
+        }
+        const { cls, teacherId } = found
+        const gate = await canSubmitJoinRequestRemote(
+          studentUserId,
+          account,
+          cls.classKey,
+          teacherId,
+        )
+        if (!gate.ok) {
+          setError(gate.reason)
+          return
+        }
+        const request = createJoinRequest(account, cls, displayName, {
+          studentUserId,
+          teacherId,
+        })
+        await onSubmit(request)
+        onClose()
+        return
+      }
+
+      const freshClasses = loadClasses()
+      const cls = findClassByJoinCode(freshClasses, code)
+      if (!cls) {
+        const hasActiveClasses = freshClasses.some((c) => c.status === 'active')
+        setError(
+          hasActiveClasses
+            ? 'Invalid class code. Copy it again from Manage class (with or without the dash).'
+            : 'No classes found in this browser. Teacher and student must use the same browser profile (not incognito vs normal).',
+        )
+        return
+      }
+      const gate = canSubmitJoinRequest(account, cls.classKey, joinRequests, students)
+      if (!gate.ok) {
+        setError(gate.reason)
+        return
+      }
+      const request = createJoinRequest(account, cls, displayName)
+      await onSubmit(request)
+      onClose()
+    } finally {
+      setIsSubmitting(false)
     }
-    const gate = canSubmitJoinRequest(account, cls.classKey, joinRequests, students)
-    if (!gate.ok) {
-      setError(gate.reason)
-      return
-    }
-    const request = createJoinRequest(account, cls, displayName)
-    onSubmit(request)
-    onClose()
   }
 
   return (
@@ -122,9 +165,10 @@ export default function JoinClassModal({
           )}
           <button
             type="submit"
-            className="w-full rounded-lg bg-violet-600 py-3 text-sm font-semibold text-white hover:bg-violet-700"
+            disabled={isSubmitting}
+            className="w-full rounded-lg bg-violet-600 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-70"
           >
-            Request to join
+            {isSubmitting ? 'Submitting…' : 'Request to join'}
           </button>
         </form>
       </div>

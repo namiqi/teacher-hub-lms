@@ -2,33 +2,46 @@ import { GraduationCap } from 'lucide-react'
 import { useState } from 'react'
 
 interface StudentSignupViewProps {
-  onSignUp: (displayName: string, email: string) => void
+  onSignUp: (displayName: string, email: string, password: string) => Promise<void>
+  onGoogleSignUp: () => Promise<void>
   onGoToLogin: () => void
   onBack: () => void
 }
 
 export default function StudentSignupView({
   onSignUp,
+  onGoogleSignUp,
   onGoToLogin,
   onBack,
 }: StudentSignupViewProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setIsSubmitting(true)
-    window.setTimeout(() => {
+    try {
+      await onSignUp(name.trim(), email.trim(), password)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign up failed.')
+    } finally {
       setIsSubmitting(false)
-      try {
-        onSignUp(name.trim(), email.trim())
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Sign up failed.')
-      }
-    }, 300)
+    }
+  }
+
+  const handleGoogle = async () => {
+    setError(null)
+    setIsSubmitting(true)
+    try {
+      await onGoogleSignUp()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign up failed.')
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -72,6 +85,17 @@ export default function StudentSignupView({
                 className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
               />
             </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Password</span>
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              />
+            </label>
             {error && (
               <p className="text-sm text-rose-600" role="alert">
                 {error}
@@ -85,6 +109,16 @@ export default function StudentSignupView({
               {isSubmitting ? 'Creating…' : 'Create account'}
             </button>
           </form>
+
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={handleGoogle}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-70"
+          >
+            Continue with Google
+          </button>
+
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{' '}
             <button

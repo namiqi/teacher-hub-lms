@@ -2,13 +2,15 @@ import { GraduationCap } from 'lucide-react'
 import { useState } from 'react'
 
 interface SignupViewProps {
-  onSignUp: (name: string, email: string) => void
+  onSignUp: (name: string, email: string, password: string) => Promise<void>
+  onGoogleSignUp: () => Promise<void>
   onGoToLogin: () => void
   onBack: () => void
 }
 
 export default function SignupView({
   onSignUp,
+  onGoogleSignUp,
   onGoToLogin,
   onBack,
 }: SignupViewProps) {
@@ -16,14 +18,30 @@ export default function SignupView({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
     setIsSubmitting(true)
-    window.setTimeout(() => {
+    try {
+      await onSignUp(name.trim(), email.trim(), password)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign up failed.')
+    } finally {
       setIsSubmitting(false)
-      onSignUp(name.trim(), email.trim())
-    }, 400)
+    }
+  }
+
+  const handleGoogle = async () => {
+    setError(null)
+    setIsSubmitting(true)
+    try {
+      await onGoogleSignUp()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign up failed.')
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -63,7 +81,7 @@ export default function SignupView({
               />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">School Email</span>
+              <span className="text-sm font-medium text-slate-700">Email</span>
               <input
                 type="email"
                 required
@@ -86,6 +104,12 @@ export default function SignupView({
               />
             </label>
 
+            {error && (
+              <p className="text-sm text-rose-600" role="alert">
+                {error}
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={isSubmitting}
@@ -94,6 +118,15 @@ export default function SignupView({
               {isSubmitting ? 'Creating account…' : 'Create Account'}
             </button>
           </form>
+
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={handleGoogle}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-70"
+          >
+            Continue with Google
+          </button>
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{' '}
