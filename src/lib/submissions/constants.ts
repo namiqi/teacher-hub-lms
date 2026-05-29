@@ -24,6 +24,15 @@ export function isPreviewableMime(mime: string): boolean {
   )
 }
 
+/** Safe object key segment for Supabase Storage (ASCII only, no spaces). */
+export function sanitizeStorageObjectName(fileName: string): string {
+  const trimmed = fileName.trim() || 'file'
+  const dot = trimmed.lastIndexOf('.')
+  const extRaw = dot >= 0 ? trimmed.slice(dot + 1) : ''
+  const ext = extRaw.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 10)
+  return ext ? `file.${ext}` : 'file'
+}
+
 export function mimeFromFile(file: File): string {
   if (file.type && ALLOWED_SUBMISSION_MIME.has(file.type)) return file.type
   const lower = file.name.toLowerCase()

@@ -1,4 +1,8 @@
-import { mimeFromFile, SUBMISSION_BUCKET } from '../submissions/constants'
+import {
+  mimeFromFile,
+  sanitizeStorageObjectName,
+  SUBMISSION_BUCKET,
+} from '../submissions/constants'
 import { canSubmitAssignment } from '../submissions/rules'
 import type {
   Assignment,
@@ -97,9 +101,10 @@ function storagePathForFile(
   studentUserId: string,
   fileName: string,
 ): string {
-  const safeName = fileName.replace(/[/\\]/g, '_').slice(0, 180)
+  // Storage keys must be ASCII-safe (no spaces, unicode, etc.). Original name stays in DB.
   const id = crypto.randomUUID()
-  return `${teacherId}/${classKey}/${assignmentId}/${studentUserId}/${id}_${safeName}`
+  const objectName = `${id}-${sanitizeStorageObjectName(fileName)}`
+  return `${teacherId}/${classKey}/${assignmentId}/${studentUserId}/${objectName}`
 }
 
 async function removeSubmissionFiles(
