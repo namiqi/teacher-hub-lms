@@ -1,15 +1,13 @@
-import { Download, FileText, Loader2, Upload } from 'lucide-react'
+import { ExternalLink, Loader2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import {
   fetchMySubmission,
-  getSubmissionFileBlobUrl,
   openSubmissionFileInNewTab,
   submitAssignmentWork,
 } from '../../lib/supabase/submissions'
 import {
   ALLOWED_SUBMISSION_EXTENSIONS,
-  isPreviewableMime,
   validateSubmissionFiles,
 } from '../../lib/submissions/constants'
 import {
@@ -23,15 +21,7 @@ import {
   attemptsRemaining,
   canSubmitAssignment,
 } from '../../lib/submissions/rules'
-import SubmissionFilePreview from '../shared/SubmissionFilePreview'
 import type { Assignment, AssignmentSubmission } from '../../types'
-
-type PreviewState = {
-  url: string
-  mimeType: string
-  fileName: string
-  storagePath: string
-}
 
 interface StudentAssignmentSubmitSectionProps {
   assignment: Assignment
@@ -60,7 +50,7 @@ export default function StudentAssignmentSubmitSection({
     getDraftFiles(assignment.id),
   )
   const [error, setError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<PreviewState | null>(null)
+  const [openingFile, setOpeningFile] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
@@ -79,12 +69,6 @@ export default function StudentAssignmentSubmitSection({
   useEffect(() => {
     void load()
   }, [load])
-
-  useEffect(() => {
-    return () => {
-      if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
-    }
-  }, [preview])
 
   if (!isSupabaseConfigured()) {
     return (
@@ -132,17 +116,15 @@ export default function StudentAssignmentSubmitSection({
     }
   }
 
-  const openFile = async (storagePath: string, fileName: string, mime: string) => {
+  const openFile = async (storagePath: string) => {
+    setOpeningFile(storagePath)
+    setError(null)
     try {
-      if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
-      if (isPreviewableMime(mime) || fileName.toLowerCase().endsWith('.pdf')) {
-        const blobUrl = await getSubmissionFileBlobUrl(storagePath, mime, fileName)
-        setPreview({ url: blobUrl, mimeType: mime, fileName, storagePath })
-      } else {
-        await openSubmissionFileInNewTab(storagePath, fileName)
-      }
+      await openSubmissionFileInNewTab(storagePath)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open file.')
+    } finally {
+      setOpeningFile(null)
     }
   }
 
@@ -203,45 +185,21 @@ export default function StudentAssignmentSubmitSection({
                 <li key={f.id}>
                   <button
                     type="button"
-                    onClick={() => void openFile(f.storagePath, f.fileName, f.mimeType)}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:underline"
+                    disabled={openingFile === f.storagePath}
+                    onClick={() => void openFile(f.storagePath)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:underline disabled:opacity-50"
                   >
-                    <FileText className="h-3.5 w-3.5" />
-                    {f.fileName}
-                    {!isPreviewableMime(f.mimeType) && (
-                      <Download className="h-3 w-3 opacity-60" />
+                    {openingFile === f.storagePath ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <ExternalLink className="h-3.5 w-3.5" />
                     )}
+                    {f.fileName}
                   </button>
                 </li>
               ))}
             </ul>
           )}
-        </div>
-      )}
-
-      {preview && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs font-medium text-slate-700">
-            <span className="truncate">{preview.fileName}</span>
-            <button
-              type="button"
-              className="shrink-0 text-violet-700 hover:underline"
-              onClick={() => {
-                if (preview.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
-                setPreview(null)
-              }}
-            >
-              Close preview
-            </button>
-          </div>
-          <SubmissionFilePreview
-            url={preview.url}
-            mimeType={preview.mimeType}
-            fileName={preview.fileName}
-            onOpenInNewTab={() =>
-              void openSubmissionFileInNewTab(preview.storagePath, preview.fileName)
-            }
-          />
         </div>
       )}
 

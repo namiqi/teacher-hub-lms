@@ -235,11 +235,11 @@ export async function fetchUnreviewedCountsByAssignment(
   return counts
 }
 
+/** Opens file in a new browser tab (inline for PDF/images, not forced download). */
 export async function openSubmissionFileInNewTab(
   storagePath: string,
-  fileName: string,
 ): Promise<void> {
-  const url = await getSubmissionFileSignedUrl(storagePath, 3600, fileName)
+  const url = await getSubmissionFileSignedUrl(storagePath, 3600)
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 

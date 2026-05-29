@@ -1,21 +1,11 @@
-import { Download, ExternalLink, Loader2, X } from 'lucide-react'
+import { ExternalLink, Loader2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { isPreviewableMime } from '../../lib/submissions/constants'
 import {
   fetchSubmissionsForAssignment,
-  getSubmissionFileBlobUrl,
   openSubmissionFileInNewTab,
   saveSubmissionReview,
 } from '../../lib/supabase/submissions'
-import SubmissionFilePreview from '../shared/SubmissionFilePreview'
 import type { Assignment, AssignmentSubmission, Student } from '../../types'
-
-type PreviewState = {
-  url: string
-  mimeType: string
-  fileName: string
-  storagePath: string
-}
 
 interface TeacherAssignmentSubmissionsPanelProps {
   assignment: Assignment
@@ -23,6 +13,36 @@ interface TeacherAssignmentSubmissionsPanelProps {
   teacherUserId: string
   onClose: () => void
   onReviewed?: () => void
+}
+
+type StudentRowStatus = 'needs_review' | 'graded' | 'not_submitted'
+
+function rowStatus(sub: AssignmentSubmission | undefined): StudentRowStatus {
+  if (!sub) return 'not_submitted'
+  if (sub.status === 'reviewed') return 'graded'
+  return 'needs_review'
+}
+
+function statusLabel(status: StudentRowStatus, sub?: AssignmentSubmission): string {
+  switch (status) {
+    case 'needs_review':
+      return sub?.isLate ? 'Needs review (late)' : 'Needs review'
+    case 'graded':
+      return sub?.score != null ? `Graded · ${sub.score}/${sub.maxPoints}` : 'Graded'
+    case 'not_submitted':
+      return 'Not submitted'
+  }
+}
+
+function statusBadgeClass(status: StudentRowStatus): string {
+  switch (status) {
+    case 'needs_review':
+      return 'bg-rose-50 text-rose-800 ring-rose-600/20'
+    case 'graded':
+      return 'bg-emerald-50 text-emerald-800 ring-emerald-600/20'
+    case 'not_submitted':
+      return 'bg-slate-100 text-slate-600 ring-slate-500/20'
+  }
 }
 
 export default function TeacherAssignmentSubmissionsPanel({
@@ -35,18 +55,19 @@ export default function TeacherAssignmentSubmissionsPanel({
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null)
   const [scoreInput, setScoreInput] = useState('')
   const [feedbackInput, setFeedbackInput] = useState('')
   const [saving, setSaving] = useState(false)
-  const [preview, setPreview] = useState<PreviewState | null>(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
+  const [openingFile, setOpeningFile] = useState<string | null>(null)
 
   const enrolled = useMemo(
     () =>
-      students.filter(
-        (s) => s.status === 'active' && s.enrolledClasses.includes(assignment.classKey),
-      ),
+      students
+        .filter(
+          (s) => s.status === 'active' && s.enrolledClasses.includes(assignment.classKey),
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [students, assignment.classKey],
   )
 
@@ -58,16 +79,32 @@ export default function TeacherAssignmentSubmissionsPanel({
     try {
       const rows = await fetchSubmissionsForAssignment(teacherUserId, assignment.id)
       setSubmissions(rows)
+      return rows
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load submissions.')
+      return []
     } finally {
       setLoading(false)
     }
   }, [assignment.id, teacherUserId])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      const rows = await load()
+      if (cancelled || enrolled.length === 0) return
+      const byStudent = new Map(rows.map((r) => [r.studentId, r]))
+      const needsReview = enrolled.find(
+        (s) => byStudent.get(s.id)?.status === 'submitted',
+      )
+      const firstWithWork = enrolled.find((s) => byStudent.has(s.id))
+      const pick = needsReview ?? firstWithWork ?? enrolled[0]
+      setSelectedStudentId(pick.id)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [load, enrolled])
 
   const byStudentId = useMemo(() => {
     const map = new Map<number, AssignmentSubmission>()
@@ -75,54 +112,56 @@ export default function TeacherAssignmentSubmissionsPanel({
     return map
   }, [submissions])
 
-  const selected = selectedId
-    ? submissions.find((s) => s.id === selectedId)
+  const selectedStudent = useMemo(
+    () => enrolled.find((s) => s.id === selectedStudentId),
+    [enrolled, selectedStudentId],
+  )
+
+  const selectedSubmission = selectedStudentId
+    ? byStudentId.get(selectedStudentId)
     : undefined
 
+  const selectedStatus = rowStatus(selectedSubmission)
+
+  const summary = useMemo(() => {
+    let needsReview = 0
+    let graded = 0
+    let notSubmitted = 0
+    for (const student of enrolled) {
+      const status = rowStatus(byStudentId.get(student.id))
+      if (status === 'needs_review') needsReview++
+      else if (status === 'graded') graded++
+      else notSubmitted++
+    }
+    return { needsReview, graded, notSubmitted }
+  }, [enrolled, byStudentId])
+
   useEffect(() => {
-    if (!selected) {
+    if (!selectedSubmission) {
       setScoreInput('')
       setFeedbackInput('')
-      setPreview(null)
       return
     }
-    setScoreInput(selected.score != null ? String(selected.score) : '')
-    setFeedbackInput(selected.feedback ?? '')
-    setPreview(null)
-  }, [selected])
+    setScoreInput(
+      selectedSubmission.score != null ? String(selectedSubmission.score) : '',
+    )
+    setFeedbackInput(selectedSubmission.feedback ?? '')
+  }, [selectedSubmission])
 
-  useEffect(() => {
-    return () => {
-      if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
-    }
-  }, [preview])
-
-  const openPreview = async (path: string, mime: string, fileName: string) => {
-    setPreviewLoading(true)
+  const handleOpenFile = async (storagePath: string) => {
+    setOpeningFile(storagePath)
     setError(null)
-    if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
-    setPreview(null)
     try {
-      if (isPreviewableMime(mime) || fileName.toLowerCase().endsWith('.pdf')) {
-        const blobUrl = await getSubmissionFileBlobUrl(path, mime, fileName)
-        setPreview({
-          url: blobUrl,
-          mimeType: mime,
-          fileName,
-          storagePath: path,
-        })
-      } else {
-        await openSubmissionFileInNewTab(path, fileName)
-      }
+      await openSubmissionFileInNewTab(storagePath)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open file.')
     } finally {
-      setPreviewLoading(false)
+      setOpeningFile(null)
     }
   }
 
   const handleSaveGrade = async () => {
-    if (!selected) return
+    if (!selectedSubmission) return
     const score = Number(scoreInput)
     if (Number.isNaN(score)) {
       setError('Enter a valid score.')
@@ -132,13 +171,12 @@ export default function TeacherAssignmentSubmissionsPanel({
     setError(null)
     try {
       await saveSubmissionReview({
-        submissionId: selected.id,
+        submissionId: selectedSubmission.id,
         score,
         feedback: feedbackInput,
         maxPoints,
       })
       await load()
-      setSelectedId(selected.id)
       onReviewed?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save grade.')
@@ -160,65 +198,88 @@ export default function TeacherAssignmentSubmissionsPanel({
         aria-modal="true"
         className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
       >
-        <div className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
-          <div className="min-w-0 pr-4">
-            <h2 className="truncate text-lg font-semibold text-slate-900">
-              Submissions
-            </h2>
-            <p className="truncate text-sm text-slate-500">{assignment.title}</p>
+        <div className="border-b border-slate-100 px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-semibold text-slate-900">
+                Submissions
+              </h2>
+              <p className="truncate text-sm text-slate-500">{assignment.title}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          {!loading && (
+            <p className="mt-2 text-xs text-slate-500">
+              {summary.needsReview > 0 && (
+                <span className="font-medium text-rose-700">
+                  {summary.needsReview} need review
+                </span>
+              )}
+              {summary.needsReview > 0 && summary.graded > 0 && ' · '}
+              {summary.graded > 0 && (
+                <span>{summary.graded} graded</span>
+              )}
+              {(summary.needsReview > 0 || summary.graded > 0) &&
+                summary.notSubmitted > 0 &&
+                ' · '}
+              {summary.notSubmitted > 0 && (
+                <span>{summary.notSubmitted} not submitted</span>
+              )}
+            </p>
+          )}
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-          <div className="max-h-48 overflow-y-auto border-b border-slate-100 sm:max-h-none sm:w-56 sm:border-b-0 sm:border-r">
+          <div className="max-h-52 overflow-y-auto border-b border-slate-100 sm:max-h-none sm:w-60 sm:border-b-0 sm:border-r">
             {loading ? (
               <p className="flex items-center gap-2 p-4 text-sm text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading…
+                Loading students…
               </p>
+            ) : enrolled.length === 0 ? (
+              <p className="p-4 text-sm text-slate-500">No students in this class.</p>
             ) : (
               <ul className="py-1">
                 {enrolled.map((student) => {
                   const sub = byStudentId.get(student.id)
-                  const active = sub?.id === selectedId
+                  const status = rowStatus(sub)
+                  const active = student.id === selectedStudentId
                   return (
                     <li key={student.id}>
                       <button
                         type="button"
-                        onClick={() => setSelectedId(sub?.id ?? null)}
-                        disabled={!sub}
-                        className={`w-full px-4 py-2.5 text-left text-sm ${
+                        onClick={() => setSelectedStudentId(student.id)}
+                        className={`w-full px-4 py-3 text-left transition-colors ${
                           active
-                            ? 'bg-[#185560]/10 font-semibold text-[#185560]'
-                            : sub
-                              ? 'text-slate-800 hover:bg-slate-50'
-                              : 'cursor-default text-slate-400'
+                            ? 'bg-[#185560]/10'
+                            : 'hover:bg-slate-50'
                         }`}
                       >
-                        <span className="flex items-center gap-2 truncate">
-                          <span className="truncate">{student.name}</span>
-                          {sub?.status === 'submitted' && (
+                        <div className="flex items-start justify-between gap-2">
+                          <span
+                            className={`truncate text-sm font-medium ${
+                              active ? 'text-[#185560]' : 'text-slate-900'
+                            }`}
+                          >
+                            {student.name}
+                          </span>
+                          {status === 'needs_review' && (
                             <span
-                              className="h-2 w-2 shrink-0 rounded-full bg-rose-500"
-                              aria-label="Needs review"
+                              className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500"
+                              aria-hidden
                             />
                           )}
-                        </span>
-                        <span className="text-xs font-normal opacity-80">
-                          {sub
-                            ? sub.status === 'reviewed' && sub.score != null
-                              ? `${sub.score}/${sub.maxPoints}`
-                              : sub.isLate
-                                ? 'Submitted (late)'
-                                : 'Needs review'
-                            : 'Not submitted'}
+                        </div>
+                        <span
+                          className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusBadgeClass(status)}`}
+                        >
+                          {statusLabel(status, sub)}
                         </span>
                       </button>
                     </li>
@@ -229,96 +290,78 @@ export default function TeacherAssignmentSubmissionsPanel({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {!selected ? (
-              <p className="text-sm text-slate-500">
-                Select a student who has submitted work to review and grade.
-              </p>
-            ) : (
+            {!selectedStudent ? (
+              <p className="text-sm text-slate-500">Select a student from the list.</p>
+            ) : selectedStatus === 'not_submitted' ? (
+              <div className="space-y-2">
+                <h3 className="font-semibold text-slate-900">{selectedStudent.name}</h3>
+                <p className="text-sm text-slate-500">
+                  This student has not submitted work for this assignment yet.
+                </p>
+              </div>
+            ) : selectedSubmission ? (
               <div className="space-y-4">
-                <div className="text-sm text-slate-600">
-                  <p>
-                    Attempt {selected.attemptNumber} ·{' '}
-                    {new Date(selected.submittedAt).toLocaleString()}
+                <div>
+                  <h3 className="font-semibold text-slate-900">{selectedStudent.name}</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Attempt {selectedSubmission.attemptNumber} ·{' '}
+                    {new Date(selectedSubmission.submittedAt).toLocaleString()}
+                    {selectedSubmission.isLate && (
+                      <span className="ml-1 text-amber-700">(late)</span>
+                    )}
                   </p>
-                  {selected.note && (
-                    <p className="mt-2 rounded-lg bg-slate-50 p-2 text-xs">
-                      <span className="font-medium">Student note:</span> {selected.note}
-                    </p>
-                  )}
                 </div>
 
-                {selected.files.length === 0 ? (
+                {selectedSubmission.note && (
+                  <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                    <span className="font-medium text-slate-800">Student note:</span>{' '}
+                    {selectedSubmission.note}
+                  </p>
+                )}
+
+                {selectedSubmission.files.length === 0 ? (
                   <p className="text-sm text-amber-700">
                     No files attached to this submission.
                   </p>
                 ) : (
-                  <ul className="space-y-2">
-                    {selected.files.map((f) => (
-                      <li
-                        key={f.id}
-                        className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-                      >
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                          {f.fileName}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void openPreview(f.storagePath, f.mimeType, f.fileName)
-                          }
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#185560] hover:underline"
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Files
+                    </h4>
+                    <ul className="mt-2 space-y-2">
+                      {selectedSubmission.files.map((f) => (
+                        <li
+                          key={f.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5"
                         >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          {isPreviewableMime(f.mimeType) ? 'Preview' : 'Open'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void openSubmissionFileInNewTab(f.storagePath, f.fileName).catch(
-                              (err) =>
-                                setError(
-                                  err instanceof Error
-                                    ? err.message
-                                    : 'Could not download file.',
-                                ),
-                            )
-                          }
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:underline"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          Download
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                          <span className="min-w-0 truncate text-sm font-medium text-slate-800">
+                            {f.fileName}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={openingFile === f.storagePath}
+                            onClick={() =>
+                              void handleOpenFile(f.storagePath)
+                            }
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-[#185560] ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {openingFile === f.storagePath ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            )}
+                            Open
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-[11px] text-slate-400">
+                      Opens in a new browser tab (PDF, images, Word).
+                    </p>
+                  </div>
                 )}
 
-                {previewLoading && (
-                  <p className="flex items-center gap-2 text-sm text-slate-500">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading preview…
-                  </p>
-                )}
-
-                {preview && (
-                  <SubmissionFilePreview
-                    url={preview.url}
-                    mimeType={preview.mimeType}
-                    fileName={preview.fileName}
-                    onOpenInNewTab={() =>
-                      void openSubmissionFileInNewTab(
-                        preview.storagePath,
-                        preview.fileName,
-                      ).catch((err) =>
-                        setError(
-                          err instanceof Error ? err.message : 'Could not open file.',
-                        ),
-                      )
-                    }
-                  />
-                )}
-
-                <div className="space-y-3 border-t border-slate-100 pt-3">
+                <div className="space-y-3 border-t border-slate-100 pt-4">
                   <label className="block">
                     <span className="text-xs font-medium text-slate-700">
                       Score (out of {maxPoints})
@@ -340,6 +383,7 @@ export default function TeacherAssignmentSubmissionsPanel({
                       onChange={(e) => setFeedbackInput(e.target.value)}
                       rows={3}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      placeholder="Comments for the student…"
                     />
                   </label>
                   <button
@@ -352,9 +396,12 @@ export default function TeacherAssignmentSubmissionsPanel({
                   </button>
                 </div>
               </div>
-            )}
+            ) : null}
+
             {error && (
-              <p className="mt-3 text-xs font-medium text-rose-600">{error}</p>
+              <p className="mt-3 text-xs font-medium text-rose-600" role="alert">
+                {error}
+              </p>
             )}
           </div>
         </div>
