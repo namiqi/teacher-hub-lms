@@ -10,7 +10,7 @@ import StudentNotificationsMenu, {
 } from './StudentNotificationsMenu'
 import StudentSidebar from './StudentSidebar'
 import StudentHomeTab from './tabs/StudentHomeTab'
-import StudentJoinRequestsTab from './tabs/StudentJoinRequestsTab'
+import StudentClassesTab from './tabs/StudentClassesTab'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import { fetchAllMySubmissions } from '../../lib/supabase/submissions'
 import {
@@ -147,7 +147,7 @@ export default function StudentPortal({
   }, [seen, studentUserId, account.id])
 
   useEffect(() => {
-    if (activeTab !== 'home' || !onRefreshPortal) return
+    if ((activeTab !== 'home' && activeTab !== 'classes') || !onRefreshPortal) return
     void onRefreshPortal()
   }, [activeTab, onRefreshPortal])
 
@@ -194,11 +194,6 @@ export default function StudentPortal({
     [joinRequests, account.id],
   )
 
-  const pendingRequestCount = useMemo(
-    () => myRequests.filter((r) => r.status === 'pending').length,
-    [myRequests],
-  )
-
   const enrolledClasses = useMemo(() => {
     if (enrollmentScopedClasses) {
       return classes.filter((c) => c.status === 'active')
@@ -232,7 +227,6 @@ export default function StudentPortal({
   )
 
   const openClass = useCallback((classKey: string) => {
-    setActiveTab('home')
     setSelectedClassKey(classKey)
     setSelectedAssignmentId(null)
   }, [])
@@ -243,7 +237,6 @@ export default function StudentPortal({
       assignmentId: string,
       opts?: { submissionId?: string },
     ) => {
-      setActiveTab('home')
       setSelectedClassKey(classKey)
       setSelectedAssignmentId(assignmentId)
       if (opts?.submissionId && seen) {
@@ -390,7 +383,7 @@ export default function StudentPortal({
       <StudentSidebar
         account={account}
         activeTab={activeTab}
-        pendingRequestCount={pendingRequestCount}
+        notificationCount={notificationItems.length}
         onTabChange={handleTabChange}
         onSignOut={onSignOut}
       />
@@ -423,8 +416,8 @@ export default function StudentPortal({
             {!selectedClass && !selectedAssignment && (
               <p className="mt-0.5 text-sm text-slate-500">
                 {activeTab === 'home'
-                  ? 'Due dates and class updates appear here'
-                  : 'Requests waiting for your teacher to approve'}
+                  ? 'Updates, deadlines, and join requests'
+                  : 'Your enrolled classes and class codes'}
               </p>
             )}
           </div>
@@ -462,18 +455,17 @@ export default function StudentPortal({
           ) : activeTab === 'home' ? (
             <StudentHomeTab
               displayName={account.displayName}
-              enrolledClasses={enrolledClasses}
-              pendingRequestCount={pendingRequestCount}
+              updateItems={notificationItems}
               dueSoonItems={dueSoonItems}
-              onOpenClass={openClass}
+              joinRequests={myRequests}
+              classes={classes}
               onOpenAssignment={openAssignment}
               onJoinClass={() => setJoinOpen(true)}
-              onViewRequests={() => setActiveTab('requests')}
             />
           ) : (
-            <StudentJoinRequestsTab
-              classes={classes}
-              requests={myRequests}
+            <StudentClassesTab
+              enrolledClasses={enrolledClasses}
+              onOpenClass={openClass}
               onJoinClass={() => setJoinOpen(true)}
             />
           )}
@@ -482,7 +474,7 @@ export default function StudentPortal({
 
       <StudentMobileNav
         activeTab={activeTab}
-        pendingRequestCount={pendingRequestCount}
+        notificationCount={notificationItems.length}
         onTabChange={handleTabChange}
       />
 

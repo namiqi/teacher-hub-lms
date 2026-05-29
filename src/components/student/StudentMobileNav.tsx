@@ -1,4 +1,4 @@
-import { LayoutDashboard, UserPlus } from 'lucide-react'
+import { LayoutDashboard, BookOpen } from 'lucide-react'
 import type { StudentTabId } from '../../types'
 
 const MOBILE_TABS: {
@@ -7,18 +7,18 @@ const MOBILE_TABS: {
   icon: typeof LayoutDashboard
 }[] = [
   { id: 'home', label: 'Home', icon: LayoutDashboard },
-  { id: 'requests', label: 'Requests', icon: UserPlus },
+  { id: 'classes', label: 'Classes', icon: BookOpen },
 ]
 
 interface StudentMobileNavProps {
   activeTab: StudentTabId
-  pendingRequestCount?: number
+  notificationCount?: number
   onTabChange: (tab: StudentTabId) => void
 }
 
 export default function StudentMobileNav({
   activeTab,
-  pendingRequestCount = 0,
+  notificationCount = 0,
   onTabChange,
 }: StudentMobileNavProps) {
   return (
@@ -44,9 +44,9 @@ export default function StudentMobileNav({
                   className={`h-5 w-5 shrink-0 ${isActive ? 'text-violet-400' : ''}`}
                   strokeWidth={isActive ? 2.25 : 2}
                 />
-                {id === 'requests' && pendingRequestCount > 0 && (
-                  <span className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
-                    {pendingRequestCount > 9 ? '9+' : pendingRequestCount}
+                {id === 'home' && notificationCount > 0 && (
+                  <span className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white">
+                    {notificationCount > 9 ? '9+' : notificationCount}
                   </span>
                 )}
               </span>

@@ -1,21 +1,21 @@
 import {
+  BookOpen,
   GraduationCap,
   LayoutDashboard,
   LogOut,
-  UserPlus,
 } from 'lucide-react'
 import type { StudentAccount, StudentTabId } from '../../types'
 import { STUDENT_TAB_LABELS } from '../../types'
 
 const NAV_ITEMS: { id: StudentTabId; icon: typeof LayoutDashboard }[] = [
   { id: 'home', icon: LayoutDashboard },
-  { id: 'requests', icon: UserPlus },
+  { id: 'classes', icon: BookOpen },
 ]
 
 interface StudentSidebarProps {
   account: StudentAccount
   activeTab: StudentTabId
-  pendingRequestCount?: number
+  notificationCount?: number
   onTabChange: (tab: StudentTabId) => void
   onSignOut: () => void
 }
@@ -23,7 +23,7 @@ interface StudentSidebarProps {
 export default function StudentSidebar({
   account,
   activeTab,
-  pendingRequestCount = 0,
+  notificationCount = 0,
   onTabChange,
   onSignOut,
 }: StudentSidebarProps) {
@@ -62,12 +62,12 @@ export default function StudentSidebar({
                 strokeWidth={2}
               />
               {STUDENT_TAB_LABELS[id]}
-              {id === 'requests' && pendingRequestCount > 0 && (
-                <span className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">
-                  {pendingRequestCount}
+              {id === 'home' && notificationCount > 0 && (
+                <span className="ml-auto rounded-full bg-rose-600 px-2 py-0.5 text-xs font-bold text-white">
+                  {notificationCount > 9 ? '9+' : notificationCount}
                 </span>
               )}
-              {isActive && !(id === 'requests' && pendingRequestCount > 0) && (
+              {isActive && !(id === 'home' && notificationCount > 0) && (
                 <span className="ml-auto h-1.5 w-1.5 rounded-full bg-violet-400" />
               )}
             </button>

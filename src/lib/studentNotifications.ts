@@ -232,3 +232,29 @@ export function dueSoonStatusLabel(
   if (workStatus === 'awaiting_grade') return 'Submitted'
   return 'Graded'
 }
+
+export function notificationKindLabel(kind: StudentNotificationKind): string {
+  switch (kind) {
+    case 'graded':
+      return 'Grade'
+    case 'due_soon':
+      return 'Due'
+    case 'new_work':
+      return 'New'
+    case 'join_approved':
+      return 'Join'
+  }
+}
+
+export function notificationKindStyles(kind: StudentNotificationKind): string {
+  switch (kind) {
+    case 'graded':
+      return 'bg-emerald-100 text-emerald-800'
+    case 'due_soon':
+      return 'bg-rose-100 text-rose-700'
+    case 'new_work':
+      return 'bg-violet-100 text-violet-800'
+    case 'join_approved':
+      return 'bg-amber-100 text-amber-800'
+  }
+}

@@ -1,33 +1,44 @@
-import { Calendar, ChevronRight, Plus } from 'lucide-react'
+import { Bell, Calendar, ChevronRight } from 'lucide-react'
 import { formatAssignmentDue } from '../../../lib/assignments'
+import { classNameForKey } from '../../../lib/studentTokens'
 import {
   dueSoonStatusLabel,
+  notificationKindLabel,
+  notificationKindStyles,
   type DueSoonItem,
+  type StudentNotificationKind,
 } from '../../../lib/studentNotifications'
-import StudentClassCard from '../StudentClassCard'
-import type { Class } from '../../../types'
+import type { Class, JoinRequest } from '../../../types'
+
+export type HomeUpdateItem = {
+  id: string
+  kind: StudentNotificationKind
+  title: string
+  subtitle: string
+  onSelect: () => void
+}
 
 interface StudentHomeTabProps {
   displayName: string
-  enrolledClasses: Class[]
-  pendingRequestCount: number
+  updateItems: HomeUpdateItem[]
   dueSoonItems: DueSoonItem[]
-  onOpenClass: (classKey: string) => void
+  joinRequests: JoinRequest[]
+  classes: Class[]
   onOpenAssignment: (classKey: string, assignmentId: string) => void
   onJoinClass: () => void
-  onViewRequests: () => void
 }
 
 export default function StudentHomeTab({
   displayName,
-  enrolledClasses,
-  pendingRequestCount,
+  updateItems,
   dueSoonItems,
-  onOpenClass,
+  joinRequests,
+  classes,
   onOpenAssignment,
   onJoinClass,
-  onViewRequests,
 }: StudentHomeTabProps) {
+  const pendingRequests = joinRequests.filter((r) => r.status === 'pending')
+
   return (
     <div className="space-y-6">
       <div>
@@ -35,22 +46,85 @@ export default function StudentHomeTab({
           Welcome back, {displayName.split(' ')[0]}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          See what&apos;s due and open a class for full details.
+          Your latest updates and upcoming deadlines.
         </p>
       </div>
 
-      {pendingRequestCount > 0 && (
-        <button
-          type="button"
-          onClick={onViewRequests}
-          className="w-full rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-left text-sm text-amber-900 transition-colors hover:bg-amber-50"
-        >
-          <span className="font-semibold">
-            {pendingRequestCount} join request
-            {pendingRequestCount === 1 ? '' : 's'} waiting for teacher approval
-          </span>
-          <span className="mt-0.5 block text-amber-700/90">View status →</span>
-        </button>
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <Bell className="h-4 w-4 text-violet-600" />
+          <h2 className="font-semibold text-slate-900">Updates</h2>
+          {updateItems.length > 0 && (
+            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
+              {updateItems.length}
+            </span>
+          )}
+        </div>
+        {updateItems.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
+            <p className="text-sm text-slate-500">You&apos;re all caught up.</p>
+          </div>
+        ) : (
+          <ul className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm divide-y divide-slate-100">
+            {updateItems.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={item.onSelect}
+                  className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50 sm:px-5"
+                >
+                  <span
+                    className={`mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${notificationKindStyles(item.kind)}`}
+                  >
+                    {notificationKindLabel(item.kind)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-slate-900">
+                      {item.title}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      {item.subtitle}
+                    </span>
+                  </span>
+                  <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {pendingRequests.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-semibold text-slate-900">Waiting for approval</h2>
+          <ul className="space-y-2">
+            {pendingRequests.map((r) => (
+              <li
+                key={r.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-amber-950">
+                    {classNameForKey(classes, r.classKey)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-800/80">
+                    Join request pending · teacher must approve
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-900">
+                  Pending
+                </span>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={onJoinClass}
+            className="mt-3 text-sm font-medium text-violet-700 hover:text-violet-800 hover:underline"
+          >
+            Join another class
+          </button>
+        </section>
       )}
 
       {dueSoonItems.length > 0 && (
@@ -97,42 +171,26 @@ export default function StudentHomeTab({
         </section>
       )}
 
-      <section>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold text-slate-900">My classes</h2>
-          <button
-            type="button"
-            onClick={onJoinClass}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
-            Join a class
-          </button>
+      {enrolledClassesHint(joinRequests, dueSoonItems, updateItems) && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-center sm:px-6">
+          <p className="text-sm text-slate-600">
+            Browse your enrolled classes from the{' '}
+            <span className="font-medium text-violet-700">Classes</span> tab.
+          </p>
         </div>
-
-        {enrolledClasses.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
-            <p className="font-medium text-slate-800">No classes yet</p>
-            <p className="mt-2 text-sm text-slate-500">
-              Enter your teacher&apos;s class code and wait for approval to appear here.
-            </p>
-            <button
-              type="button"
-              onClick={onJoinClass}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
-            >
-              <Plus className="h-4 w-4" strokeWidth={2.5} />
-              Join a class
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {enrolledClasses.map((cls) => (
-              <StudentClassCard key={cls.classKey} course={cls} onOpen={onOpenClass} />
-            ))}
-          </div>
-        )}
-      </section>
+      )}
     </div>
+  )
+}
+
+function enrolledClassesHint(
+  joinRequests: JoinRequest[],
+  dueSoonItems: DueSoonItem[],
+  updateItems: HomeUpdateItem[],
+): boolean {
+  return (
+    joinRequests.filter((r) => r.status === 'pending').length === 0 &&
+    dueSoonItems.length === 0 &&
+    updateItems.length === 0
   )
 }

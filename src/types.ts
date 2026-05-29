@@ -285,14 +285,14 @@ export const HEADER_TITLES: Record<TabId, string> = {
   settings: 'Account Settings',
 }
 
-export type StudentTabId = 'home' | 'requests'
+export type StudentTabId = 'home' | 'classes'
 
 export const STUDENT_TAB_LABELS: Record<StudentTabId, string> = {
   home: 'Home',
-  requests: 'Join requests',
+  classes: 'Classes',
 }
 
 export const STUDENT_HEADER_TITLES: Record<StudentTabId, string> = {
-  home: 'My classes',
-  requests: 'Join requests',
+  home: 'Home',
+  classes: 'My classes',
 }

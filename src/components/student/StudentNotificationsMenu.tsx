@@ -1,6 +1,10 @@
 import { Bell, ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { StudentNotificationKind } from '../../lib/studentNotifications'
+import {
+  notificationKindLabel,
+  notificationKindStyles,
+  type StudentNotificationKind,
+} from '../../lib/studentNotifications'
 
 export interface StudentNotificationMenuItem {
   id: string
@@ -13,32 +17,6 @@ export interface StudentNotificationMenuItem {
 interface StudentNotificationsMenuProps {
   items: StudentNotificationMenuItem[]
   variant?: 'mobile' | 'desktop'
-}
-
-function kindStyles(kind: StudentNotificationKind): string {
-  switch (kind) {
-    case 'graded':
-      return 'bg-emerald-100 text-emerald-800'
-    case 'due_soon':
-      return 'bg-rose-100 text-rose-700'
-    case 'new_work':
-      return 'bg-violet-100 text-violet-800'
-    case 'join_approved':
-      return 'bg-amber-100 text-amber-800'
-  }
-}
-
-function kindLabel(kind: StudentNotificationKind): string {
-  switch (kind) {
-    case 'graded':
-      return 'Grade'
-    case 'due_soon':
-      return 'Due'
-    case 'new_work':
-      return 'New'
-    case 'join_approved':
-      return 'Join'
-  }
 }
 
 export default function StudentNotificationsMenu({
@@ -121,9 +99,9 @@ export default function StudentNotificationsMenu({
                     className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50"
                   >
                     <span
-                      className={`mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${kindStyles(item.kind)}`}
+                      className={`mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${notificationKindStyles(item.kind)}`}
                     >
-                      {kindLabel(item.kind)}
+                      {notificationKindLabel(item.kind)}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium text-slate-900">
