@@ -152,34 +152,44 @@ function App() {
   const [teacherUserId, setTeacherUserId] = useState<string | null>(null)
   const [studentUserId, setStudentUserId] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState<AppView>(getInitialView)
-  const [user, setUser] = useState<User>(() => loadUser() ?? DEFAULT_USER)
+  const [user, setUser] = useState<User>(() =>
+    useCloud ? DEFAULT_USER : loadUser() ?? DEFAULT_USER,
+  )
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [manageClassId, setManageClassId] = useState<number | null>(null)
   const [teacherClassId, setTeacherClassId] = useState<number | null>(null)
-  const [classes, setClasses] = useState<Class[]>(loadClasses)
-  const [students, setStudents] = useState<Student[]>(loadStudents)
-  const [attendance, setAttendance] = useState<AttendanceLedger>(() =>
-    loadAttendance(loadStudents(loadClasses()), loadClasses()),
+  const [classes, setClasses] = useState<Class[]>(() =>
+    useCloud ? [] : loadClasses(),
   )
-  const [attendanceClassKey, setAttendanceClassKey] = useState(() => {
-    const loaded = loadClasses()
-    return (
-      loaded.find((c) => c.status !== 'archived')?.classKey ??
-      loaded[0]?.classKey ??
-      'math_201'
-    )
-  })
-  const [payments, setPayments] = useState<PaymentRecord[]>(loadPayments)
-  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>(loadJoinRequests)
-  const [studentAccounts, setStudentAccounts] = useState<StudentAccount[]>(
-    loadStudentAccounts,
+  const [students, setStudents] = useState<Student[]>(() =>
+    useCloud ? [] : loadStudents(),
+  )
+  const [attendance, setAttendance] = useState<AttendanceLedger>(() =>
+    useCloud
+      ? { columns: [], recordsByClass: {} }
+      : loadAttendance(loadStudents(loadClasses()), loadClasses()),
+  )
+  const [attendanceClassKey, setAttendanceClassKey] = useState('')
+  const [payments, setPayments] = useState<PaymentRecord[]>(() =>
+    useCloud ? [] : loadPayments(),
+  )
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>(() =>
+    useCloud ? [] : loadJoinRequests(),
+  )
+  const [studentAccounts, setStudentAccounts] = useState<StudentAccount[]>(() =>
+    useCloud ? [] : loadStudentAccounts(),
   )
   const [studentAccount, setStudentAccount] = useState<StudentAccount | null>(
-    () => (loadSessionRole() === 'student' ? loadStudentAccount() : null),
+    () =>
+      useCloud
+        ? null
+        : loadSessionRole() === 'student'
+          ? loadStudentAccount()
+          : null,
   )
   const [assignments, setAssignments] = useState<Assignment[]>(() =>
-    loadAssignments(loadClasses()),
+    useCloud ? [] : loadAssignments(loadClasses()),
   )
   const [classEnrollments, setClassEnrollments] = useState<ClassEnrollment[]>([])
   const [submissionNotifyVersion, setSubmissionNotifyVersion] = useState(0)
@@ -277,34 +287,34 @@ function App() {
   const shouldPersistAssignments = useRef(false)
 
   useEffect(() => {
-    if (!shouldPersistClasses.current) return
+    if (useCloud || !shouldPersistClasses.current) return
     saveClasses(classes)
-  }, [classes])
+  }, [classes, useCloud])
 
   useEffect(() => {
-    if (!shouldPersistStudents.current) return
+    if (useCloud || !shouldPersistStudents.current) return
     saveStudents(students)
-  }, [students])
+  }, [students, useCloud])
 
   useEffect(() => {
-    if (!shouldPersistAttendance.current) return
+    if (useCloud || !shouldPersistAttendance.current) return
     saveAttendance(attendance)
-  }, [attendance])
+  }, [attendance, useCloud])
 
   useEffect(() => {
-    if (!shouldPersistPayments.current) return
+    if (useCloud || !shouldPersistPayments.current) return
     savePayments(payments)
-  }, [payments])
+  }, [payments, useCloud])
 
   useEffect(() => {
-    if (!shouldPersistJoinRequests.current) return
+    if (useCloud || !shouldPersistJoinRequests.current) return
     saveJoinRequests(joinRequests)
-  }, [joinRequests])
+  }, [joinRequests, useCloud])
 
   useEffect(() => {
-    if (!shouldPersistAssignments.current) return
+    if (useCloud || !shouldPersistAssignments.current) return
     saveAssignments(assignments)
-  }, [assignments])
+  }, [assignments, useCloud])
 
   const applyTeacherCloud = useCallback(
     (teacherId: string, state: TeacherCloudState, nextUser: User) => {
@@ -345,7 +355,7 @@ function App() {
       setStudentUserId(studentId)
       setTeacherUserId(null)
       setStudentAccount(account)
-      saveStudentSession(account)
+      if (!useCloud) saveStudentSession(account)
       setClasses(portal.classes)
       setStudents(portal.students)
       setJoinRequests(portal.joinRequests)
@@ -370,14 +380,14 @@ function App() {
     if (routed.role === 'teacher') {
       const { user, teacherId, state } = routed.payload
       applyTeacherCloud(teacherId, state, user)
-      saveTeacherSession()
+      if (!useCloud) saveTeacherSession()
       setCurrentView('dashboard')
       return
     }
     const { account, studentId, portal } = routed.payload
     applyStudentCloud(studentId, account, portal)
     setCurrentView('student-portal')
-  }, [applyTeacherCloud, applyStudentCloud])
+  }, [applyTeacherCloud, applyStudentCloud, useCloud])
 
   useEffect(() => {
     if (!useCloud) return
@@ -480,23 +490,30 @@ function App() {
     }
   }, [useCloud, studentUserId, applyStudentCloud])
 
-  const refreshAssignments = useCallback(() => {
+  const refreshAssignments = useCallback(async () => {
+    if (useCloud && teacherUserId) {
+      try {
+        const state = await fetchTeacherWorkspace(teacherUserId)
+        setAssignments(state.assignments)
+      } catch (err) {
+        console.error('[Teacher Hub] Failed to refresh assignments', err)
+      }
+      return
+    }
     setAssignments(loadAssignments(classes))
-  }, [classes])
+  }, [useCloud, teacherUserId, classes])
 
   useEffect(() => {
     if (currentView !== 'dashboard') return
-    refreshJoinRequests()
-    refreshAssignments()
+    void refreshJoinRequests()
+    void refreshAssignments()
   }, [currentView, activeTab, refreshJoinRequests, refreshAssignments])
 
   useEffect(() => {
     if (currentView !== 'dashboard' && currentView !== 'student-portal') return
     const onSync = () => {
       void refreshJoinRequests()
-      if (currentView === 'dashboard') refreshAssignments()
-      // Do not refresh the student portal on focus — closing the file picker
-      // triggers focus and was resetting class/assignment navigation.
+      if (currentView === 'dashboard') void refreshAssignments()
     }
     const onVisible = () => {
       if (document.visibilityState === 'visible') onSync()
@@ -798,15 +815,33 @@ function App() {
           mode === 'draft' ? 'draft' : 'published',
           existing,
         )
-        if (existingId) {
-          return prev.map((a) => (a.id === existingId ? next : a))
+        const nextList = existingId
+          ? prev.map((a) => (a.id === existingId ? next : a))
+          : [...prev, next]
+        if (useCloud && teacherUserId) {
+          void saveTeacherWorkspace(teacherUserId, {
+            classes,
+            students,
+            attendance,
+            payments,
+            assignments: nextList,
+          }).catch((err) => {
+            console.error('[Teacher Hub] Failed to save assignment', err)
+          })
         }
-        return [...prev, next]
+        return nextList
       })
       shouldPersistAssignments.current = true
       logger.info('Assignment saved', { classKey, mode, existingId })
     },
-    [],
+    [
+      useCloud,
+      teacherUserId,
+      classes,
+      students,
+      attendance,
+      payments,
+    ],
   )
 
   const handleSaveAnnouncement = useCallback(
@@ -826,21 +861,56 @@ function App() {
           mode === 'draft' ? 'draft' : 'published',
           existing,
         )
-        if (existingId) {
-          return prev.map((a) => (a.id === existingId ? next : a))
+        const nextList = existingId
+          ? prev.map((a) => (a.id === existingId ? next : a))
+          : [...prev, next]
+        if (useCloud && teacherUserId) {
+          void saveTeacherWorkspace(teacherUserId, {
+            classes,
+            students,
+            attendance,
+            payments,
+            assignments: nextList,
+          }).catch((err) => {
+            console.error('[Teacher Hub] Failed to save announcement', err)
+          })
         }
-        return [...prev, next]
+        return nextList
       })
       shouldPersistAssignments.current = true
       logger.info('Announcement saved', { classKey, mode, existingId })
     },
-    [],
+    [
+      useCloud,
+      teacherUserId,
+      classes,
+      students,
+      attendance,
+      payments,
+    ],
   )
 
-  const handleDeleteAssignment = useCallback((assignmentId: string) => {
-    setAssignments((prev) => prev.filter((a) => a.id !== assignmentId))
-    shouldPersistAssignments.current = true
-  }, [])
+  const handleDeleteAssignment = useCallback(
+    (assignmentId: string) => {
+      setAssignments((prev) => {
+        const nextList = prev.filter((a) => a.id !== assignmentId)
+        if (useCloud && teacherUserId) {
+          void saveTeacherWorkspace(teacherUserId, {
+            classes,
+            students,
+            attendance,
+            payments,
+            assignments: nextList,
+          }).catch((err) => {
+            console.error('[Teacher Hub] Failed to delete assignment', err)
+          })
+        }
+        return nextList
+      })
+      shouldPersistAssignments.current = true
+    },
+    [useCloud, teacherUserId, classes, students, attendance, payments],
+  )
 
   const handleExportBackup = useCallback(() => {
     const backup = buildAppBackup(
@@ -1457,6 +1527,7 @@ function App() {
         enrollmentScopedClasses={useCloud}
         classEnrollments={classEnrollments}
         studentUserId={studentUserId}
+        onRefreshPortal={refreshStudentPortal}
         onSignOut={handleStudentSignOut}
         onSubmitJoinRequest={handleStudentSubmitJoin}
       />

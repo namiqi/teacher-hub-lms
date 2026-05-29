@@ -18,11 +18,12 @@ import {
   buildStudentNotificationItems,
 } from '../../lib/studentNotifications'
 import {
-  getStudentSeenState,
+  fetchStudentSeenState,
   markGradedSubmissionSeen,
   markJoinApprovedSeen,
   markPortalVisited,
-} from '../../lib/studentSeen'
+  type StudentSeenState,
+} from '../../lib/supabase/studentPortalState'
 import type {
   Assignment,
   AssignmentSubmission,
@@ -71,6 +72,7 @@ interface StudentPortalProps {
   enrollmentScopedClasses?: boolean
   classEnrollments?: ClassEnrollment[]
   studentUserId?: string | null
+  onRefreshPortal?: () => void | Promise<void>
   onSignOut: () => void
   onSubmitJoinRequest: (request: JoinRequest) => void | Promise<void>
 }
@@ -86,6 +88,7 @@ export default function StudentPortal({
   enrollmentScopedClasses = false,
   classEnrollments = [],
   studentUserId,
+  onRefreshPortal,
   onSignOut,
   onSubmitJoinRequest,
 }: StudentPortalProps) {
@@ -98,17 +101,59 @@ export default function StudentPortal({
   )
   const [joinOpen, setJoinOpen] = useState(false)
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([])
-  const [seenVersion, setSeenVersion] = useState(0)
+  const [seen, setSeen] = useState<StudentSeenState | null>(null)
 
-  const bumpSeen = useCallback(() => {
-    setSeenVersion((v) => v + 1)
-  }, [])
+  useEffect(() => {
+    let cancelled = false
+    void fetchStudentSeenState({
+      studentUserId,
+      accountId: account.id,
+    })
+      .then((state) => {
+        if (!cancelled) setSeen(state)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSeen({
+            lastVisitAt: null,
+            seenGradedSubmissionIds: [],
+            seenApprovedRequestIds: [],
+          })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [studentUserId, account.id])
+
+  useEffect(() => {
+    if (!seen || seen.lastVisitAt) return
+    void markPortalVisited({
+      studentUserId,
+      accountId: account.id,
+      current: seen,
+    }).then(setSeen)
+  }, [seen, studentUserId, account.id])
 
   useEffect(() => {
     return () => {
-      markPortalVisited(account.id)
+      if (!seen) return
+      void markPortalVisited({
+        studentUserId,
+        accountId: account.id,
+        current: seen,
+      })
     }
-  }, [account.id])
+  }, [seen, studentUserId, account.id])
+
+  useEffect(() => {
+    if (activeTab !== 'home' || !onRefreshPortal) return
+    void onRefreshPortal()
+  }, [activeTab, onRefreshPortal])
+
+  useEffect(() => {
+    void onRefreshPortal?.()
+  }, [onRefreshPortal])
 
   useEffect(() => {
     if (!studentUserId || !isSupabaseConfigured()) {
@@ -169,16 +214,11 @@ export default function StudentPortal({
     [enrolledClasses],
   )
 
-  const seen = useMemo(
-    () => getStudentSeenState(account.id),
-    [account.id, seenVersion],
-  )
-
-  useEffect(() => {
-    if (seen.lastVisitAt) return
-    markPortalVisited(account.id)
-    bumpSeen()
-  }, [account.id, seen.lastVisitAt, bumpSeen])
+  const seenForNotify = seen ?? {
+    lastVisitAt: null,
+    seenGradedSubmissionIds: [],
+    seenApprovedRequestIds: [],
+  }
 
   const dueSoonItems = useMemo(
     () =>
@@ -206,12 +246,16 @@ export default function StudentPortal({
       setActiveTab('home')
       setSelectedClassKey(classKey)
       setSelectedAssignmentId(assignmentId)
-      if (opts?.submissionId) {
-        markGradedSubmissionSeen(account.id, opts.submissionId)
-        bumpSeen()
+      if (opts?.submissionId && seen) {
+        void markGradedSubmissionSeen({
+          studentUserId,
+          accountId: account.id,
+          current: seen,
+          submissionId: opts.submissionId,
+        }).then(setSeen)
       }
     },
-    [account.id, bumpSeen],
+    [account.id, studentUserId, seen],
   )
 
   const notificationItems = useMemo((): StudentNotificationMenuItem[] => {
@@ -221,7 +265,7 @@ export default function StudentPortal({
       classes,
       submissions,
       joinRequests: myRequests,
-      seen,
+      seen: seenForNotify,
     })
     return raw.map((item) => ({
       id: item.id,
@@ -231,9 +275,13 @@ export default function StudentPortal({
       onSelect: () => {
         if (item.kind === 'join_approved') {
           openClass(item.classKey)
-          if (item.joinRequestId) {
-            markJoinApprovedSeen(account.id, item.joinRequestId)
-            bumpSeen()
+          if (item.joinRequestId && seen) {
+            void markJoinApprovedSeen({
+              studentUserId,
+              accountId: account.id,
+              current: seen,
+              requestId: item.joinRequestId,
+            }).then(setSeen)
           }
           return
         }
@@ -250,9 +298,10 @@ export default function StudentPortal({
     classes,
     submissions,
     myRequests,
+    seenForNotify,
     seen,
     account.id,
-    bumpSeen,
+    studentUserId,
     openClass,
     openAssignment,
   ])
@@ -315,16 +364,20 @@ export default function StudentPortal({
   }
 
   useEffect(() => {
-    if (!selectedAssignmentId) return
+    if (!selectedAssignmentId || !seen) return
     const sub = submissions.find(
       (s) =>
         s.assignmentId === selectedAssignmentId && s.status === 'reviewed',
     )
     if (sub) {
-      markGradedSubmissionSeen(account.id, sub.id)
-      bumpSeen()
+      void markGradedSubmissionSeen({
+        studentUserId,
+        accountId: account.id,
+        current: seen,
+        submissionId: sub.id,
+      }).then(setSeen)
     }
-  }, [selectedAssignmentId, submissions, account.id, bumpSeen])
+  }, [selectedAssignmentId, submissions, account.id, studentUserId, seen])
 
   const pageTitle = selectedAssignment
     ? selectedAssignment.title

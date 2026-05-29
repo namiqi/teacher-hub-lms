@@ -1,5 +1,5 @@
 import { isAnnouncement, isVisibleToStudent } from './assignments'
-import type { StudentSeenState } from './studentSeen'
+import type { StudentSeenState } from './supabase/studentPortalState'
 import type {
   Assignment,
   AssignmentSubmission,
