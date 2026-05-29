@@ -28,6 +28,8 @@ interface StudentPortalProps {
   assignments: Assignment[]
   payments: PaymentRecord[]
   attendance: AttendanceLedger
+  /** When true, `classes` is already filtered to this student's enrollments (Supabase). */
+  enrollmentScopedClasses?: boolean
   studentUserId?: string | null
   onSignOut: () => void
   onSubmitJoinRequest: (request: JoinRequest) => void | Promise<void>
@@ -41,6 +43,7 @@ export default function StudentPortal({
   assignments,
   payments,
   attendance,
+  enrollmentScopedClasses = false,
   studentUserId,
   onSignOut,
   onSubmitJoinRequest,
@@ -77,11 +80,14 @@ export default function StudentPortal({
   )
 
   const enrolledClasses = useMemo(() => {
+    if (enrollmentScopedClasses) {
+      return classes.filter((c) => c.status === 'active')
+    }
     if (!linkedStudent) return []
     return linkedStudent.enrolledClasses
       .map((key) => classes.find((c) => c.classKey === key))
       .filter((c): c is Class => Boolean(c && c.status === 'active'))
-  }, [linkedStudent, classes])
+  }, [enrollmentScopedClasses, linkedStudent, classes])
 
   const selectedClass = useMemo(
     () =>

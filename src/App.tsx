@@ -98,6 +98,7 @@ import {
   ensureClassJoinCodesSynced,
   fetchTeacherWorkspace,
   insertStudentEnrollment,
+  saveTeacherWorkspace,
   type TeacherCloudState,
   type TeacherWorkspaceData,
   updateJoinRequestStatus,
@@ -1058,10 +1059,11 @@ function App() {
         (a) => a.id === request.studentAccountId,
       )?.linkedStudentId
 
+      const nextClasses = syncClassRosters(classes, result.students)
       setStudents(result.students)
-      setClasses((clsPrev) => syncClassRosters(clsPrev, result.students))
-      shouldPersistClasses.current = true
-      shouldPersistStudents.current = true
+      setClasses(nextClasses)
+      shouldPersistClasses.current = !useCloud
+      shouldPersistStudents.current = !useCloud
 
       if (linkedId) {
         setAttendance((attPrev) => {
@@ -1096,30 +1098,55 @@ function App() {
       )
       shouldPersistJoinRequests.current = !useCloud
 
-      if (useCloud && teacherUserId && request.studentUserId && linkedId) {
-        try {
-          await updateJoinRequestStatus(
-            requestId,
-            'approved',
-            result.request.reviewedAt,
+      if (useCloud && teacherUserId && linkedId) {
+        const studentAuthId = request.studentUserId
+        if (!studentAuthId) {
+          console.error(
+            '[Teacher Hub] Join request missing studentUserId; student must re-submit join from the app.',
           )
-          await insertStudentEnrollment(
-            request.studentUserId,
-            teacherUserId,
-            request.classKey,
-            linkedId,
-          )
-          await updateStudentProfileLink(
-            request.studentUserId,
-            linkedId,
-            teacherUserId,
-          )
-        } catch (err) {
-          console.error('[Teacher Hub] Failed to sync join approval', err)
+        } else {
+          try {
+            await saveTeacherWorkspace(teacherUserId, {
+              classes: nextClasses,
+              students: result.students,
+              attendance,
+              payments,
+              assignments,
+            })
+            await updateJoinRequestStatus(
+              requestId,
+              'approved',
+              result.request.reviewedAt,
+            )
+            await insertStudentEnrollment(
+              studentAuthId,
+              teacherUserId,
+              request.classKey,
+              linkedId,
+            )
+            await updateStudentProfileLink(
+              studentAuthId,
+              linkedId,
+              teacherUserId,
+            )
+          } catch (err) {
+            console.error('[Teacher Hub] Failed to sync join approval', err)
+            throw err
+          }
         }
       }
     },
-    [joinRequests, students, classes, studentAccounts, useCloud, teacherUserId],
+    [
+      joinRequests,
+      students,
+      classes,
+      studentAccounts,
+      attendance,
+      payments,
+      assignments,
+      useCloud,
+      teacherUserId,
+    ],
   )
 
   const handleRejectJoinRequest = useCallback(
@@ -1336,6 +1363,7 @@ function App() {
         assignments={assignments}
         payments={payments}
         attendance={attendance}
+        enrollmentScopedClasses={useCloud}
         studentUserId={studentUserId}
         onSignOut={handleStudentSignOut}
         onSubmitJoinRequest={handleStudentSubmitJoin}
