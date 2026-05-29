@@ -23,6 +23,7 @@ import type {
 interface StudentClassPerformanceProps {
   classKey: string
   student: Student | undefined
+  rosterStudentId?: number
   studentUserId?: string | null
   assignments: Assignment[]
   attendance: AttendanceLedger
@@ -32,6 +33,7 @@ interface StudentClassPerformanceProps {
 export default function StudentClassPerformance({
   classKey,
   student,
+  rosterStudentId,
   studentUserId,
   assignments,
   attendance,
@@ -72,10 +74,12 @@ export default function StudentClassPerformance({
 
   const avgPercent = useMemo(() => averageGradePercent(gradeRows), [gradeRows])
 
+  const attendanceStudentId = rosterStudentId ?? student?.id
+
   const attendanceHistory = useMemo(() => {
-    if (!student) return []
-    return buildAttendanceHistory(attendance, classKey, student.id)
-  }, [attendance, classKey, student])
+    if (attendanceStudentId == null) return []
+    return buildAttendanceHistory(attendance, classKey, attendanceStudentId)
+  }, [attendance, classKey, attendanceStudentId])
 
   const attendanceStats = useMemo(
     () => attendanceSummaryFromHistory(attendanceHistory),
@@ -203,9 +207,9 @@ export default function StudentClassPerformance({
           <h2 className="font-semibold text-slate-900">Attendance record</h2>
           <p className="mt-0.5 text-xs text-slate-500">How you were marked for each class day</p>
         </div>
-        {!student ? (
+        {!student && attendanceStudentId == null ? (
           <p className="px-4 py-8 text-center text-sm text-slate-500 sm:px-5">
-            Link your account to a class roster to see attendance.
+            We couldn&apos;t find your roster record for this class yet.
           </p>
         ) : attendanceHistory.length === 0 ? (
           <div className="px-4 py-10 text-center sm:px-5">

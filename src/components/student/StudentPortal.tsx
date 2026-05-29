@@ -153,6 +153,25 @@ export default function StudentPortal({
     return classEnrollments.find((e) => e.classKey === navClassKey)
   }, [navClassKey, classEnrollments])
 
+  /** Roster row for the open class — cloud enrollments use student_id, not always linkedStudentId. */
+  const studentForClass = useMemo(() => {
+    if (selectedEnrollment) {
+      const fromEnrollment = students.find(
+        (s) => s.id === selectedEnrollment.studentId,
+      )
+      if (fromEnrollment) return fromEnrollment
+    }
+    if (
+      linkedStudent &&
+      navClassKey &&
+      linkedStudent.enrolledClasses.includes(navClassKey)
+    ) {
+      return linkedStudent
+    }
+    if (linkedStudent && !navClassKey) return linkedStudent
+    return undefined
+  }, [selectedEnrollment, students, linkedStudent, navClassKey])
+
   const openClass = (classKey: string) => {
     setSelectedClassKey(classKey)
     setSelectedAssignmentId(null)
@@ -236,7 +255,8 @@ export default function StudentPortal({
           ) : selectedClass ? (
             <StudentClassDetail
               cls={selectedClass}
-              student={linkedStudent}
+              student={studentForClass}
+              rosterStudentId={selectedEnrollment?.studentId}
               studentUserId={studentUserId}
               assignments={assignments}
               payments={payments}

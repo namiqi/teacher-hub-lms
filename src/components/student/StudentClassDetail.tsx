@@ -40,6 +40,7 @@ type StudentClassTabId = 'assignments' | 'performance' | 'class-info'
 interface StudentClassDetailProps {
   cls: Class
   student: Student | undefined
+  rosterStudentId?: number
   studentUserId?: string | null
   assignments: Assignment[]
   payments: PaymentRecord[]
@@ -51,6 +52,7 @@ interface StudentClassDetailProps {
 export default function StudentClassDetail({
   cls,
   student,
+  rosterStudentId,
   studentUserId,
   assignments,
   payments,
@@ -202,6 +204,7 @@ export default function StudentClassDetail({
         <StudentClassPerformance
           classKey={cls.classKey}
           student={student}
+          rosterStudentId={rosterStudentId ?? student?.id}
           studentUserId={studentUserId}
           assignments={assignments}
           attendance={attendance}
