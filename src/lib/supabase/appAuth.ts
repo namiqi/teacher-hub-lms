@@ -53,7 +53,11 @@ export async function routeAuthenticatedUser(
   }
 
   if (role === 'student') {
-    const { account, portal } = await resolveStudentSession(authUser.id)
+    await ensureProfileRole(authUser.id, 'student', displayName, email)
+    const { account, portal } = await resolveStudentSession(authUser.id, {
+      displayName,
+      email,
+    })
     return {
       role: 'student',
       payload: { account, studentId: authUser.id, portal },

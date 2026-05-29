@@ -135,7 +135,7 @@ export function onAuthStateChange(
   return () => data.subscription.unsubscribe()
 }
 
-/** Ensure OAuth users get correct profile role (Google first sign-in). */
+/** Create or repair profile + teacher workspace / student profile rows. */
 export async function ensureProfileRole(
   userId: string,
   role: AppRole,
@@ -143,6 +143,8 @@ export async function ensureProfileRole(
   email: string,
 ): Promise<void> {
   const supabase = getSupabase()
+  const initials = getInitials(displayName)
+
   const { data: existing } = await supabase
     .from('profiles')
     .select('id, role')
@@ -150,31 +152,53 @@ export async function ensureProfileRole(
     .maybeSingle()
 
   if (!existing) {
-    await supabase.from('profiles').insert({
+    const { error: profileError } = await supabase.from('profiles').insert({
       id: userId,
       role,
       display_name: displayName,
       email,
-      initials: getInitials(displayName),
+      initials,
     })
-    if (role === 'teacher') {
-      await supabase.from('teacher_workspaces').insert({
+    if (profileError) throw new Error(profileError.message)
+  } else if (existing.role !== role) {
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ role, display_name: displayName, email, initials })
+      .eq('id', userId)
+    if (updateError) throw new Error(updateError.message)
+  }
+
+  if (role === 'teacher') {
+    const { data: workspace } = await supabase
+      .from('teacher_workspaces')
+      .select('teacher_id')
+      .eq('teacher_id', userId)
+      .maybeSingle()
+
+    if (!workspace) {
+      const { error } = await supabase.from('teacher_workspaces').insert({
         teacher_id: userId,
         workspace: emptyWorkspaceJson(),
       })
-    } else {
-      await supabase.from('student_profiles').insert({
-        user_id: userId,
-        display_name: displayName,
-        email,
-        initials: getInitials(displayName),
-      })
+      if (error) throw new Error(error.message)
     }
     return
   }
 
-  if (existing.role !== role) {
-    await supabase.from('profiles').update({ role }).eq('id', userId)
+  const { data: studentRow } = await supabase
+    .from('student_profiles')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (!studentRow) {
+    const { error } = await supabase.from('student_profiles').insert({
+      user_id: userId,
+      display_name: displayName,
+      email,
+      initials,
+    })
+    if (error) throw new Error(error.message)
   }
 }
 

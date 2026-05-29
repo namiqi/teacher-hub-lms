@@ -1,0 +1,25 @@
+{
+  "_instructions": "Supabase Dashboard → Authentication → Users → Add user → Create new user",
+  "email": "namigismayilov94@gmail.com",
+  "password": "SET_A_STRONG_PASSWORD_HERE",
+  "auto_confirm_user": true,
+  "user_metadata": {
+    "role": "student",
+    "display_name": "Namig Ismayilov"
+  },
+  "_after_create_verify_in_table_editor": {
+    "profiles": {
+      "id": "<same as auth user UUID>",
+      "role": "student",
+      "email": "namigismayilov94@gmail.com",
+      "display_name": "Namig Ismayilov"
+    },
+    "student_profiles": {
+      "user_id": "<same as auth user UUID>",
+      "email": "namigismayilov94@gmail.com",
+      "display_name": "Namig Ismayilov",
+      "initials": "NI"
+    }
+  },
+  "_sign_in_on_app": "Landing → I'm a student → Sign in (not Get started on teacher card)"
+}

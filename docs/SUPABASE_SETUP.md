@@ -36,6 +36,8 @@ That message is a **Supabase/network timeout**, not bad SQL. Try:
 
 If part 1 succeeded but part 2 failed, only re-run the missing part(s).
 
+4. **`supabase/schema-4-rls-insert.sql`** — run if student sign-up shows **Student profile not found** (allows the app to create profile rows after sign-up).
+
 ## 3. Enable Google sign-in
 
 1. **Authentication → Providers → Google** — enable and add your Google OAuth client ID/secret.

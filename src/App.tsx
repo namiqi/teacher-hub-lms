@@ -82,6 +82,7 @@ import type { User as SupabaseAuthUser } from '@supabase/supabase-js'
 import { routeAuthenticatedUser } from './lib/supabase/appAuth'
 import {
   ensureActiveSession,
+  ensureProfileRole,
   getSession,
   onAuthStateChange,
   signInWithEmail,
@@ -1173,6 +1174,7 @@ function App() {
         if (!session) {
           await ensureActiveSession(email, password)
         }
+        await ensureProfileRole(user.id, 'student', displayName, email)
         await routeSession(user)
         return
       }

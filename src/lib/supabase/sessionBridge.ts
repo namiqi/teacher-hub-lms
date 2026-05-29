@@ -20,14 +20,32 @@ export async function resolveTeacherSession(userId: string): Promise<{
   return { user, workspace }
 }
 
-export async function resolveStudentSession(userId: string): Promise<{
+export async function resolveStudentSession(
+  userId: string,
+  options?: { displayName?: string; email?: string },
+): Promise<{
   account: StudentAccount
   portal: Awaited<ReturnType<typeof fetchStudentPortalData>>
 }> {
-  const account = await fetchStudentProfile(userId)
-  if (!account) throw new Error('Student profile not found.')
-  const portal = await fetchStudentPortalData(userId, account)
-  return { account, portal }
+  const displayName = options?.displayName
+  const email = options?.email
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    let account = await fetchStudentProfile(userId)
+    if (!account && displayName && email) {
+      await ensureProfileRole(userId, 'student', displayName, email)
+      account = await fetchStudentProfile(userId)
+    }
+    if (account) {
+      const portal = await fetchStudentPortalData(userId, account)
+      return { account, portal }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300))
+  }
+
+  throw new Error(
+    'Student profile could not be created. Run supabase/schema-4-rls-insert.sql in Supabase, or add the student row in Table Editor.',
+  )
 }
 
 export async function bootstrapAuthSession(): Promise<{

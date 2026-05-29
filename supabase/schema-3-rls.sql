@@ -15,6 +15,10 @@ drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own" on public.profiles
   for update using (auth.uid() = id);
 
+drop policy if exists "profiles_insert_own" on public.profiles;
+create policy "profiles_insert_own" on public.profiles
+  for insert with check (auth.uid() = id);
+
 drop policy if exists "workspace_teacher_all" on public.teacher_workspaces;
 create policy "workspace_teacher_all" on public.teacher_workspaces
   for all using (auth.uid() = teacher_id);
@@ -55,7 +59,15 @@ create policy "join_requests_student_insert" on public.join_requests
 
 drop policy if exists "student_profiles_own" on public.student_profiles;
 create policy "student_profiles_own" on public.student_profiles
-  for all using (auth.uid() = user_id);
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "student_profiles_insert_own" on public.student_profiles;
+create policy "student_profiles_insert_own" on public.student_profiles
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "student_profiles_update_own" on public.student_profiles;
+create policy "student_profiles_update_own" on public.student_profiles
+  for update using (auth.uid() = user_id);
 
 drop policy if exists "enrollments_student_select" on public.student_enrollments;
 create policy "enrollments_student_select" on public.student_enrollments
