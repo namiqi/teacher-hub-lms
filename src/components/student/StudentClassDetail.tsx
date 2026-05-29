@@ -26,6 +26,7 @@ import {
   paymentsForStudentClass,
 } from '../../lib/payments'
 import { getTokenBalance, getTokenCapacity } from '../../lib/studentTokens'
+import StudentClassPerformance from './StudentClassPerformance'
 import type {
   Assignment,
   AttendanceLedger,
@@ -34,11 +35,12 @@ import type {
   Student,
 } from '../../types'
 
-type StudentClassTabId = 'assignments' | 'class-info'
+type StudentClassTabId = 'assignments' | 'performance' | 'class-info'
 
 interface StudentClassDetailProps {
   cls: Class
   student: Student | undefined
+  studentUserId?: string | null
   assignments: Assignment[]
   payments: PaymentRecord[]
   attendance: AttendanceLedger
@@ -46,26 +48,10 @@ interface StudentClassDetailProps {
   onOpenAssignment: (assignmentId: string) => void
 }
 
-function recentAttendanceSummary(
-  ledger: AttendanceLedger,
-  classKey: string,
-  studentId: number,
-): { present: number; absent: number; excused: number } {
-  const records = ledger.recordsByClass[classKey]?.[studentId] ?? {}
-  let present = 0
-  let absent = 0
-  let excused = 0
-  for (const status of Object.values(records)) {
-    if (status === 'present') present++
-    else if (status === 'absent') absent++
-    else if (status === 'excused') excused++
-  }
-  return { present, absent, excused }
-}
-
 export default function StudentClassDetail({
   cls,
   student,
+  studentUserId,
   assignments,
   payments,
   attendance,
@@ -82,11 +68,6 @@ export default function StudentClassDetail({
     () => postsForClass(assignments, cls.classKey, { studentView: true }),
     [assignments, cls.classKey],
   )
-
-  const attendanceStats = useMemo(() => {
-    if (!student) return null
-    return recentAttendanceSummary(attendance, cls.classKey, student.id)
-  }, [attendance, cls.classKey, student])
 
   const classPayments = useMemo(() => {
     if (!student) return []
@@ -148,6 +129,17 @@ export default function StudentClassDetail({
         </button>
         <button
           type="button"
+          onClick={() => setTab('performance')}
+          className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+            tab === 'performance'
+              ? 'border-violet-600 text-violet-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Performance
+        </button>
+        <button
+          type="button"
           onClick={() => setTab('class-info')}
           className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
             tab === 'class-info'
@@ -206,6 +198,15 @@ export default function StudentClassDetail({
             </ul>
           )}
         </section>
+      ) : tab === 'performance' ? (
+        <StudentClassPerformance
+          classKey={cls.classKey}
+          student={student}
+          studentUserId={studentUserId}
+          assignments={assignments}
+          attendance={attendance}
+          onOpenAssignment={onOpenAssignment}
+        />
       ) : (
         <div className="space-y-3 sm:space-y-4">
           {student && (
@@ -240,27 +241,6 @@ export default function StudentClassDetail({
                   )}
                 </div>
               )}
-            </section>
-          )}
-
-          {attendanceStats && (
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-              <h2 className="font-semibold text-slate-900">Attendance</h2>
-              <p className="mt-1 text-xs text-slate-500">Recorded this term</p>
-              <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                <span className="text-emerald-700">
-                  <span className="font-semibold">{attendanceStats.present}</span>{' '}
-                  present
-                </span>
-                <span className="text-rose-700">
-                  <span className="font-semibold">{attendanceStats.absent}</span>{' '}
-                  absent
-                </span>
-                <span className="text-slate-600">
-                  <span className="font-semibold">{attendanceStats.excused}</span>{' '}
-                  excused
-                </span>
-              </div>
             </section>
           )}
 

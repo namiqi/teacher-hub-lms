@@ -237,6 +237,7 @@ export default function StudentPortal({
             <StudentClassDetail
               cls={selectedClass}
               student={linkedStudent}
+              studentUserId={studentUserId}
               assignments={assignments}
               payments={payments}
               attendance={attendance}

@@ -128,6 +128,22 @@ async function removeSubmissionFiles(
   if (error) throw new Error(error.message)
 }
 
+export async function fetchMySubmissionsForClass(
+  studentUserId: string,
+  classKey: string,
+): Promise<AssignmentSubmission[]> {
+  const { data, error } = await getSupabase()
+    .from('assignment_submissions')
+    .select('*')
+    .eq('student_user_id', studentUserId)
+    .eq('class_key', classKey)
+    .order('submitted_at', { ascending: false })
+
+  if (error) throw new Error(error.message)
+  const rows = (data ?? []) as SubmissionRow[]
+  return rows.map((row) => mapSubmission(row, []))
+}
+
 export async function fetchMySubmission(
   assignmentId: string,
   studentUserId: string,
